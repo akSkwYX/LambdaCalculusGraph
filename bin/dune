@@ -1,4 +1,4 @@
 (executable
- (public_name TIPE)
+ (public_name main)
  (name main)
- (libraries TIPE))
+ (libraries graph strategy lambdaTerm token))

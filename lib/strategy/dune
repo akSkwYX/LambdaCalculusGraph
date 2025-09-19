@@ -1,0 +1,3 @@
+(library
+ (name strategy)
+ (libraries graph lambdaTerm))
