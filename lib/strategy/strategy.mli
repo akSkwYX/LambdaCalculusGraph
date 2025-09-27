@@ -1,0 +1,12 @@
+module type Strategy = sig
+  module Lt : LambdaTerm.LambdaTerm
+
+  val is_normal : Lt.t -> bool
+  val reduce : Lt.t -> Lt.t
+  val reduce_string : string -> string
+  val reduce_string_step_by_step : string -> string list
+  val reduce_string_graph : string -> (string, int) Hashtbl.t * Graph.Graph.t
+end
+
+module LeftInnermostStrategy : Strategy
+module LeftExternalStrategy : Strategy
