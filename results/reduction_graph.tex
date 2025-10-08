@@ -1,0 +1,15 @@
+
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{graphs, graphdrawing}
+\usegdlibrary{trees}
+\begin{document}
+\tikz [every node/.style = draw] \graph [grow down, tree layout] {
+
+  "$(\lambda x0.f1)(\lambda x0.(x0)(x0))(\lambda x0.(x0)(x0))$" -> "$(f0)(\lambda x0.(x0)(x0))$";
+
+  "$(\lambda x0.f1)(\lambda x0.(x0)(x0))(\lambda x0.(x0)(x0))$" -> "$(\lambda x0.f1)((\lambda x0.(x0)(x0))(\lambda x0.(x0)(x0)))$";
+
+  "$(\lambda x0.f1)((\lambda x0.(x0)(x0))(\lambda x0.(x0)(x0)))$" -> "$f0$";
+};
+\end{document}

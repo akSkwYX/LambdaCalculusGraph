@@ -12,6 +12,7 @@ module type Graph = sig
   val get_neighbors : int -> t -> int list
   val init_from_edges : (int * int) list -> t
   val to_string : t -> string
+  val to_pdf : t -> (int, int list) Hashtbl.t -> string -> unit
 end
 
 module Graph : Graph = struct
@@ -30,7 +31,11 @@ module Graph : Graph = struct
     if v1 < 0 || v1 >= len || v2 < 0 || v2 >= len then
       raise (Invalid_argument "Node index out of bounds")
     else
-      g.(v1) <- v2 :: g.(v1)
+      (* Remove this case if want to see each possible derivations *)
+      if List.mem v2 g.(v1) then
+        ()
+      else
+        g.(v1) <- v2 :: g.(v1)
 
   let force_add_edge v1 v2 g =
     let len = Array.length g in
@@ -59,4 +64,29 @@ module Graph : Graph = struct
        acc ^ (string_of_int i) ^ " : " ^
        (String.concat "; " (List.map string_of_int neighbors) ^ "\n"), i+1
     ) ("", 0) g |> fst
+
+  let to_pdf (g : t) (name_map : (int, int list) Hashtbl.t) (filename : string) : unit =
+    let format_node n = LambdaTerm.NoParenthesis.to_format_string @@ LambdaTerm.NoParenthesis.of_deBruijn n in
+    let tex_file = open_out ("results/" ^ filename ^ ".tex") in
+    let () = Printf.fprintf tex_file "
+\\documentclass{article}
+\\usepackage{tikz}
+\\usetikzlibrary{graphs, graphdrawing}
+\\usegdlibrary{trees}
+\\begin{document}
+\\tikz [every node/.style = draw] \\graph [grow down, tree layout] {
+" in
+    let () = Array.iteri (fun i neighbors ->
+      let source = try format_node (Hashtbl.find name_map i) with Not_found -> string_of_int i in
+      let targets = List.map (fun v ->
+        try format_node (Hashtbl.find name_map v) with Not_found -> string_of_int v
+      ) neighbors in
+      List.iter (fun t -> Printf.fprintf tex_file "
+  \"$%s$\" -> \"$%s$\";
+" source t) targets
+    ) g in
+    let () = Printf.fprintf tex_file "};\n\\end{document}\n" in
+    close_out tex_file;
+    let _ = Sys.command ("lualatex -interaction=nonstopmode -output-directory=results results/" ^ filename ^ ".tex" ^ " > results/output.log") in
+    ()
 end
