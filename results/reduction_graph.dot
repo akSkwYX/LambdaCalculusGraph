@@ -1,0 +1,11 @@
+digraph G {
+  graph [splines=true, overlap=false, rankdir=LR, nodesep=0.7, ranksep=1.0];
+  node [shape=box, style=rounded, fontname="DejaVu Sans", fontsize=10, margin=0.08];
+  edge [arrowsize=0.8];
+
+  n0 [label="(λx0.(x0)(x0))(λx0.(x0)(x0))"];
+
+  n0 -> n0;
+
+  { rank = same; n0; }
+}
