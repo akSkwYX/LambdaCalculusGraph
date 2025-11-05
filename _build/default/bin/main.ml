@@ -56,8 +56,8 @@ let reduction_graph_viewer preterm =
       let () = Hashtbl.iter (fun k v -> 
         output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
       let () = close_out file in
-      Graph.Graph.to_pdf_dot g reverse_hst "reduction_graph";
-      let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in ()
+      Graph.Graph.to_pdf_dot g reverse_hst "reduction_graph"; ()
+      (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
   in
 
   let () = print_endline "Lambda calculus reduction graph viewer" in

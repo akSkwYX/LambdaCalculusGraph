@@ -287,6 +287,7 @@ module NoStrategy : NoStrategy = struct
       | [] -> ()
       | _ ->
         let new_terms = List.fold_left (fun acc t -> one_step t @ acc) [] t_list in
+        let new_terms = List.sort Lt.compare_length new_terms in
         aux new_terms
     in
     aux [term]; node_map, !graph

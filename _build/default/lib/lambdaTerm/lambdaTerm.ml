@@ -8,6 +8,7 @@ module type LambdaTerm = sig
   exception Parsing_error of string
 
   val eq : t -> t -> bool
+  val compare_length : t -> t -> int
 
   val deBruijn_index : t -> int list
   val deBruijn_string : t -> string
@@ -30,7 +31,59 @@ module Base = struct
   exception Parsing_error of string
 
   let rec to_string = function
-      Var v -> Token.to_string v
+    | Fun ({ lexeme = Var a_1; index = _}, 
+        Fun ({ lexeme = Var b_1; index = _}, 
+          Fun ({ lexeme = Var c_1; index = _},
+            App [Var { lexeme = Var b_2; index = _}; 
+                 App [Var { lexeme = Var a_2; index = _};
+                      Var { lexeme = Var b_3; index = _}; 
+                      Var { lexeme = Var c_2; index = _}]])))
+      when a_1 = a_2 && b_1 = b_2 && b_2 = b_3 && c_1 = c_2 ->
+      "[S]"
+    | Fun ({ lexeme = Var a_1; index = _}, 
+        Fun ({ lexeme = Var b_1; index = _}, 
+          Fun ({ lexeme = Var c_1; index = _}, 
+            Fun ({ lexeme = Var d_1; index = _}, 
+              App [Var { lexeme = Var a_2; index = _};
+                   Var { lexeme = Var c_2; index = _}; 
+                   App [Var { lexeme = Var b_2; index = _};
+                        Var { lexeme = Var c_3; index = _}; 
+                        Var { lexeme = Var d_2; index = _}]])))) 
+      when a_1 = a_2 && b_1 = b_2 && c_1 = c_2 && c_2 = c_3 && d_1 = d_2 ->
+      "[+]"
+    | Fun ({ lexeme = Var a_1; index = _},
+        Fun ({ lexeme = Var b_1; index = _},
+          Fun ({ lexeme = Var c_1; index = _},
+            App [Var { lexeme = Var a_2; index = _};
+                 App [Var { lexeme = Var b_2; index = _};
+                      Var { lexeme = Var c_2; index = _}]])))
+      when a_1 = a_2 && b_1 = b_2 && c_1 = c_2 ->
+      "[*]"
+    | Fun ({ lexeme = Var a_1; index = _},
+        Fun ({ lexeme = Var _; index = _},
+          Var { lexeme = Var a_2; index = _})) 
+      when a_1 = a_2 ->
+      "[T]"
+    | Fun ({ lexeme = Var _; index = _},
+        Fun ({ lexeme = Var b_1; index = _},
+          Var { lexeme = Var b_2; index = _}))
+      when b_1 = b_2 ->
+      "[F]"
+    | Fun ({ lexeme = Var a_1; index = _},
+        App [Var { lexeme = Var a_2; index = _};
+             Fun ({ lexeme = Var b_1; index = _},
+               Fun ({ lexeme = Var _; index = _},
+                 Var { lexeme = Var b_2; index = _}))])
+      when a_1 = a_2 && b_1 = b_2 ->
+      "[P1]"
+    | Fun ({ lexeme = Var a_1; index = _},
+        App [Var { lexeme = Var a_2; index = _};
+             Fun ({ lexeme = Var _; index = _},
+               Fun ({ lexeme = Var c_1; index = _},
+                 Var { lexeme = Var c_2; index = _}))])
+      when a_1 = a_2 && c_1 = c_2 ->
+      "[P2]"
+    | Var v -> Token.to_string v
     | Fun (v, body) -> "λ" ^ Token.to_string v ^ "." ^ to_string body
     | App t_list ->
       let rec aux acc = function
@@ -118,6 +171,11 @@ module Base = struct
   let eq t1 t2 =
     List.equal (=) (deBruijn_index t1) (deBruijn_index t2) 
 
+  let length =
+    Fun.compose List.length deBruijn_index
+
+  let compare_length t1 t2 =
+    length t1 - length t2
 
   let rec to_format_string = function
       Var v -> Token.to_string v
@@ -241,10 +299,20 @@ module LambdaTerm : LambdaTerm = struct
              Fun ({ lexeme = Var "x"; index = Token.index t },
                Fun ({ lexeme = Var "y"; index = Token.index t },
                  Var { lexeme = Var "y"; index = Token.index t }))])
-    (* | Couple u,v ->  *)
-    (*   Fun ({ lexeme = Var "z"; index = Token.index t }, *)
-    (*     App [Var { lexeme = Var "z"; index = Token.index t }; *)
-    (*          of_string u; of_string v]) *)
+    | P ->
+      Fun ({ lexeme = Var "n"; index = Token.index t },
+        Fun ({ lexeme = Var "f"; index = Token.index t },
+          Fun ({ lexeme = Var "x"; index = Token.index t },
+            App [Var { lexeme = Var "n"; index = Token.index t };
+                 Fun ({ lexeme = Var "g"; index = Token.index t },
+                   Fun ({ lexeme = Var "h"; index = Token.index t },
+                     App [Var { lexeme = Var "h"; index = Token.index t };
+                          App [Var { lexeme = Var "g"; index = Token.index t };
+                               Var { lexeme = Var "f"; index = Token.index t }]]));
+                 Fun ({ lexeme = Var "u"; index = Token.index t },
+                   Var { lexeme = Var "x"; index = Token.index t });
+                 Fun ({ lexeme = Var "u"; index = Token.index t },
+                   Var { lexeme = Var "u"; index = Token.index t })])))
     | _ -> raise (Parsing_error ("[ " ^ (string_of_int (Token.index t)) ^ " ] Cannot extend token: " ^ (Token.to_string t)))
 
   and of_string s =
@@ -260,6 +328,7 @@ module LambdaTerm : LambdaTerm = struct
     | ({lexeme=False; _} as t) :: l
     | ({lexeme=P1; _} as t) :: l 
     | ({lexeme=P2; _} as t) :: l
+    | ({lexeme=P; _} as t) :: l
     | ({lexeme=Number _; _} as t) :: l -> let t_list, remaining = parse l in (extend t) :: t_list, remaining
     | {lexeme=Lambda; index=i} :: l ->
       let params, body_l = parse_params l in

@@ -6,6 +6,7 @@ module type LambdaTerm = sig
   exception Parsing_error of string
 
   val eq : t -> t -> bool
+  val compare_length : t -> t -> int
 
   val deBruijn_index : t -> int list
   val deBruijn_string : t -> string
