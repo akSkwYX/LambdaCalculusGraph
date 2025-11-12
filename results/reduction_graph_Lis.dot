@@ -1,0 +1,35 @@
+digraph G {
+  graph [splines=true, overlap=false, rankdir=LR, nodesep=0.7, ranksep=1.0];
+  node [shape=box, style=rounded, fontname="DejaVu Sans", fontsize=10, margin=0.08];
+  edge [arrowsize=0.8];
+
+  n0 [label="(λx0.λx1.λx2.λx3.(x0)(x2)((x1)(x2)(x3)))(λx0.λx1.(λx2.(x0)(x2))(x1))(λx0.λx1.(λx2.(x0)((x0)(x2)))(x1))"];
+  n1 [label="(λx0.λx1.λx2.λx3.(x0)(x2)((x1)(x2)(x3)))(λx0.λx1.(x0)(x1))(λx0.λx1.(λx2.(x0)((x0)(x2)))(x1))"];
+  n2 [label="(λx0.λx1.λx2.(λx3.λx4.(x3)(x4))(x1)((x0)(x1)(x2)))(λx0.λx1.(λx2.(x0)((x0)(x2)))(x1))"];
+  n3 [label="(λx0.λx1.λx2.(λx3.(x1)(x3))((x0)(x1)(x2)))(λx0.λx1.(λx2.(x0)((x0)(x2)))(x1))"];
+  n4 [label="(λx0.λx1.λx2.(x1)((x0)(x1)(x2)))(λx0.λx1.(λx2.(x0)((x0)(x2)))(x1))"];
+  n5 [label="(λx0.λx1.λx2.(x1)((x0)(x1)(x2)))(λx0.λx1.(x0)((x0)(x1)))"];
+  n6 [label="λx0.λx1.(x0)((λx2.λx3.(x2)((x2)(x3)))(x0)(x1))"];
+  n7 [label="λx0.λx1.(x0)((λx2.(x0)((x0)(x2)))(x1))"];
+  n8 [label="λx0.λx1.(x0)((x0)((x0)(x1)))"];
+
+  n0 -> n1;
+  n1 -> n2;
+  n2 -> n3;
+  n3 -> n4;
+  n4 -> n5;
+  n5 -> n6;
+  n6 -> n7;
+  n7 -> n8;
+  n8 -> n8;
+
+  { rank = same; n0; }
+  { rank = same; n1; }
+  { rank = same; n2; }
+  { rank = same; n3; }
+  { rank = same; n4; }
+  { rank = same; n5; }
+  { rank = same; n6; }
+  { rank = same; n7; }
+  { rank = same; n8; }
+}

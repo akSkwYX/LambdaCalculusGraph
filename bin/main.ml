@@ -1,9 +1,8 @@
 (* ---------- Tests ---------- *)
 
 let test _ =
-  let module Ns = Strategy.NoStrategy in
-  let list = Ns.reduce_step (Ns.Lt.of_string "Lx.Ly.(Lz.xxz)y") in
-  List.iter (fun t -> print_endline (Ns.Lt.to_string t)) list
+  let module Les = Strategy.LeftExternalStrategy in
+  print_endline (Les.Lt.to_string (Les.Lt.of_string "[S]"))
 
 (* ---------- All reduction possibilities ---------- *)
 
@@ -56,7 +55,7 @@ let reduction_graph_viewer preterm =
       let () = Hashtbl.iter (fun k v -> 
         output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
       let () = close_out file in
-      Graph.Graph.to_pdf_dot g reverse_hst "reduction_graph"; ()
+      Graph.Graph.to_pdf g reverse_hst "reduction_graph"; ()
       (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
   in
 
@@ -114,11 +113,11 @@ let reduction_with_chosen_strategy preterm strategy =
       let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
       if strategy = "Lis" then
         let (hst, g) = Lis.reduce_string_graph lambda in
-        Graph.Graph.to_pdf_dot g (reverse_hst hst) "reduction_graph_Lis";
+        Graph.Graph.to_pdf g (reverse_hst hst) "reduction_graph_Lis";
         let _ = Sys.command "xdg-open results/reduction_graph_Lis.pdf &" in ()
       else
         let (hst, g) = Les.reduce_string_graph lambda in
-        Graph.Graph.to_pdf_dot g (reverse_hst hst) "reduction_graph_Les";
+        Graph.Graph.to_pdf g (reverse_hst hst) "reduction_graph_Les";
         let _ = Sys.command "xdg-open results/reduction_graph_Les.pdf &" in ()
   in
 

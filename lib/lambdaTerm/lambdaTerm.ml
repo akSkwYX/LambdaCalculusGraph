@@ -1,5 +1,7 @@
 open Token
 
+let ( #: ) = Fun.compose
+
 module type LambdaTerm = sig
   module Token = Token
 
@@ -11,16 +13,17 @@ module type LambdaTerm = sig
   val compare_length : t -> t -> int
 
   val deBruijn_index : t -> int list
-  val deBruijn_string : t -> string
   val of_deBruijn : int list -> t
-  val of_deBruijn_string : string -> t
-  val deBruijn_to_string : int list -> string
 
   val to_string : t -> string
   val to_string_tree : ?indent : int -> t -> string
   val to_ugly_string : t -> string
-  val to_format_string : t -> string
+
   val of_string : string -> t
+
+
+  (* Compositions *)
+  val deBruijn_to_string : int list -> string
 end
 
 module Base = struct
@@ -30,7 +33,26 @@ module Base = struct
 
   exception Parsing_error of string
 
-  let rec to_string = function
+  let rec to_string_tree ?(indent=0) term =
+    let indentation = String.make (indent * 2) ' ' in
+    match term with
+    | Var v -> indentation ^ "Var(" ^ Token.to_string v ^ ")\n"
+    | Fun (v, body) ->
+        indentation ^ "Fun(" ^ Token.to_string v ^ ")\n" ^
+        (to_string_tree ~indent:(indent + 1) body)
+    | App t_list ->
+        indentation ^ "App(\n" ^
+        List.fold_left (fun acc t -> acc ^ to_string_tree ~indent:(indent + 1) t) "" t_list ^
+        indentation ^ ")\n"
+    | Empty -> indentation ^ "Empty\n"
+
+  let rec to_string t =
+    let () = print_endline #: to_string_tree t in
+    match t with
+    | Fun ({ lexeme = Var a_1; index = _},
+        Var {lexeme = Var a_2; index = _})
+      when a_1 = a_2 ->
+      "[Id]"
     | Fun ({ lexeme = Var a_1; index = _}, 
         Fun ({ lexeme = Var b_1; index = _}, 
           Fun ({ lexeme = Var c_1; index = _},
@@ -94,13 +116,6 @@ module Base = struct
       aux "" t_list
     | Empty -> ""
 
-  let deBruijn_to_string indices =
-    String.concat " " (List.map (fun x -> 
-      if x=(-1) then "λ" 
-      else if x=(-2) then "("
-      else if x=(-3) then ")"
-      else string_of_int x ) indices)
-
   let deBruijn_index t = 
     let rec aux binders = function
       | Var v ->
@@ -116,10 +131,6 @@ module Base = struct
     in
     let res = aux [] t in
     res
-
-  let deBruijn_string t =
-    let indices = deBruijn_index t in
-    deBruijn_to_string indices
 
   let of_deBruijn indices =
     let rec aux binders : int list -> t list * int list = function
@@ -164,9 +175,6 @@ module Base = struct
     | [x] -> x
     | t_list -> App t_list
 
-  let of_deBruijn_string s =
-    let indices = String.split_on_char ' ' s in
-    of_deBruijn (List.map (fun x -> if x = "λ" then -1 else int_of_string x) indices)
 
   let eq t1 t2 =
     List.equal (=) (deBruijn_index t1) (deBruijn_index t2) 
@@ -177,30 +185,6 @@ module Base = struct
   let compare_length t1 t2 =
     length t1 - length t2
 
-  let rec to_format_string = function
-      Var v -> Token.to_string v
-    | Fun (v, body) -> "\\lambda " ^ Token.to_string v ^ "." ^ to_format_string body
-    | App t_list ->
-      let rec aux acc = function
-        | [] -> acc
-        | Var v :: l -> aux (acc ^ Token.to_string v) l
-        | t :: l -> aux (acc ^ "(" ^ to_format_string t ^ ")") l
-      in
-      aux "" t_list
-    | Empty -> ""
-
-  let rec to_string_tree ?(indent=0) term =
-    let indentation = String.make (indent * 2) ' ' in
-    match term with
-    | Var v -> indentation ^ "Var(" ^ Token.to_string v ^ ")\n"
-    | Fun (v, body) ->
-        indentation ^ "Fun(" ^ Token.to_string v ^ ")\n" ^
-        (to_string_tree ~indent:(indent + 1) body)
-    | App t_list ->
-        indentation ^ "App(\n" ^
-        List.fold_left (fun acc t -> acc ^ to_string_tree ~indent:(indent + 1) t) "" t_list ^
-        indentation ^ ")\n"
-    | Empty -> indentation ^ "Empty\n"
 
   let rec to_ugly_string term =
     match term with
@@ -231,6 +215,9 @@ module Base = struct
     match params with
     | [] -> raise (Parsing_error "No parameters found when constructing function")
     | h :: t -> aux (Fun (h, body)) t
+
+
+  let deBruijn_to_string = to_string #: of_deBruijn
 end
 
 module LambdaTerm : LambdaTerm = struct
@@ -313,6 +300,29 @@ module LambdaTerm : LambdaTerm = struct
                    Var { lexeme = Var "x"; index = Token.index t });
                  Fun ({ lexeme = Var "u"; index = Token.index t },
                    Var { lexeme = Var "u"; index = Token.index t })])))
+    | IsZero ->
+      Fun ({ lexeme = Var "n"; index = Token.index t },
+        App [Var { lexeme = Var "n"; index = Token.index t };
+             Fun ({ lexeme = Var "z"; index = Token.index t },
+               Fun ({ lexeme = Var "x"; index = Token.index t },
+                 Fun ({ lexeme = Var "y"; index = Token.index t },
+                   Var { lexeme = Var "y"; index = Token.index t })));
+             Fun ({ lexeme = Var "x"; index = Token.index t },
+               Fun ({ lexeme = Var "y"; index = Token.index t },
+                 Var { lexeme = Var "x"; index = Token.index t }))])
+    | Y -> 
+      App [Fun ({ lexeme = Var "g"; index = Token.index t },
+             Fun ({ lexeme = Var "h"; index = Token.index t }, 
+               App [Var { lexeme = Var "h"; index = Token.index t };
+                    App [Var { lexeme = Var "g"; index = Token.index t };
+                         Var { lexeme = Var "g"; index = Token.index t };
+                         Var { lexeme = Var "h"; index = Token.index t }]]));
+           Fun ({ lexeme = Var "g"; index = Token.index t },
+             Fun ({ lexeme = Var "h"; index = Token.index t },
+               App [Var { lexeme = Var "h"; index = Token.index t };
+                    App [Var { lexeme = Var "g"; index = Token.index t };
+                         Var { lexeme = Var "g"; index = Token.index t };
+                         Var { lexeme = Var "h"; index = Token.index t }]]))]
     | _ -> raise (Parsing_error ("[ " ^ (string_of_int (Token.index t)) ^ " ] Cannot extend token: " ^ (Token.to_string t)))
 
   and of_string s =
@@ -329,6 +339,8 @@ module LambdaTerm : LambdaTerm = struct
     | ({lexeme=P1; _} as t) :: l 
     | ({lexeme=P2; _} as t) :: l
     | ({lexeme=P; _} as t) :: l
+    | ({lexeme=IsZero; _} as t) :: l
+    | ({lexeme=Y; _} as t) :: l
     | ({lexeme=Number _; _} as t) :: l -> let t_list, remaining = parse l in (extend t) :: t_list, remaining
     | {lexeme=Lambda; index=i} :: l ->
       let params, body_l = parse_params l in

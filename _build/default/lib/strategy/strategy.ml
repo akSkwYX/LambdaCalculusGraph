@@ -39,9 +39,12 @@ module BaseStrategy (Lt : LambdaTerm.LambdaTerm) : BaseStrategy = struct
       Lt.Var _ -> true
     | Lt.Fun (_, body) -> is_normal body
     | Lt.App t_list -> 
-      List.for_all (function 
-        | Lt.Fun _ -> false 
-        | t -> is_normal t) t_list
+      let rec aux = function
+        | [] -> true
+        | Lt.Fun _ :: _ :: _ -> false
+        | h :: t -> is_normal h && aux t
+      in
+      aux t_list
     | Lt.Empty -> true
 
   let rec free_vars = function
@@ -156,14 +159,19 @@ module PartialLeftInnermostStrategy : PartialStrategy = struct
       let rec aux = function
         | [] -> raise (Invalid_argument "Got a term with an empty application")
         | [t] -> [reduce_step t]
-        | t1 :: t2 :: l ->
-          if not (is_normal t1) then
-            reduce_step t1 :: t2 :: l
+        | Lt.Fun (v, body) :: u :: l ->
+          if is_normal body then
+            if is_normal u then
+              (substitute (Lt.Var v) u body) :: l
+            else
+              Lt.Fun (v, body) :: (reduce_step u) :: l
           else
-          match t1 with
-          | Lt.Fun (v, body) when is_normal t2 -> substitute (Lt.Var v) t2 body :: l
-          | _ when not (is_normal t2) -> t1 :: (reduce_step t2) :: l
-          | _ -> t1 :: aux (t2 :: l)
+            Lt.Fun (v, reduce_step body) :: u :: l
+        | t :: l ->
+          if is_normal t then
+            t :: aux l
+          else
+            reduce_step t :: l
       in
       match aux t_list with
       | [t] -> t
@@ -183,30 +191,28 @@ module PartialLeftExternalStrategy : PartialStrategy = struct
     | Fun (v, body) -> Fun (v, reduce_step body)
     | App t_list ->
       begin
-      (* TODO : Improve this *)
-      let rec aux = function
+      let rec aux has_found_redex = function
         | [] -> raise (Invalid_argument "Got a term with an empty application")
-        | [t] -> [reduce_step t]
+        | [t] -> false, [reduce_step t]
         | t1 :: t2 :: l ->
           match t1 with
-          | Fun (v, body) -> substitute (Var v) t2 body :: l
-          | _ -> t1 :: aux (t2 :: l)
+          | Fun (v, body) -> true, substitute (Var v) t2 body :: l
+          | _ -> let has_found_redex, result = aux has_found_redex (t2 :: l) in has_found_redex, t1 :: result
       in
-      match aux t_list with
-      | [t] -> t
-      | l when l = t_list ->
+      match aux false t_list with
+      | _, [t] -> t
+      | b, l when not b ->
         (let rec aux2 = function
           | [] -> []
-          | Lt.App t_list :: l ->
-            (match reduce_step (Lt.App t_list) with
-            | Lt.App l' when l' = t_list -> Lt.App t_list :: aux2 l
+          | h :: l ->
+            (match reduce_step h with
+            | t' when t' = h -> h :: aux2 l
             | t' -> t' :: l)
-          | h :: l -> h :: aux2 l
         in
         match aux2 l with
         | [t] -> t
         | l -> App l)
-      | l -> App l
+      | _, l -> App l
       end
 end
 

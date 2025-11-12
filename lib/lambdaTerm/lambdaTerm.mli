@@ -9,16 +9,15 @@ module type LambdaTerm = sig
   val compare_length : t -> t -> int
 
   val deBruijn_index : t -> int list
-  val deBruijn_string : t -> string
   val of_deBruijn : int list -> t
-  val of_deBruijn_string : string -> t
-  val deBruijn_to_string : int list -> string
 
   val to_string : t -> string
   val to_string_tree : ?indent : int -> t -> string
   val to_ugly_string : t -> string
-  val to_format_string : t -> string
   val of_string : string -> t
+
+  (* Compositions *)
+  val deBruijn_to_string : int list -> string
 end
 
 (* module Left : LambdaTerm *)
