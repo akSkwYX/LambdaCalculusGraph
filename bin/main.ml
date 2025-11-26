@@ -1,8 +1,11 @@
 (* ---------- Tests ---------- *)
 
 let test _ =
-  let module Les = Strategy.LeftExternalStrategy in
-  print_endline (Les.Lt.to_string (Les.Lt.of_string "[S]"))
+  let module Lis = Strategy.LeftInnermostStrategy in
+  let term_str = "Lf,x.fx" in
+  let term = Lis.Lt.of_string term_str in
+  let () = print_endline ("Term : " ^ (Lis.Lt.to_string_tree term)) in
+  let () = print_endline ("Term : " ^ (Lis.Lt.to_string term)) in ()
 
 (* ---------- All reduction possibilities ---------- *)
 
@@ -56,6 +59,45 @@ let reduction_graph_viewer preterm =
         output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
       let () = close_out file in
       Graph.Graph.to_pdf g reverse_hst "reduction_graph"; ()
+      (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
+  in
+
+  let () = print_endline "Lambda calculus reduction graph viewer" in
+  match preterm with
+  | "" ->
+    while not !exit do
+      let () = print_string "> " in
+      let lambda = read_line () in
+      process lambda
+    done
+  | _ -> process preterm
+
+(* ---------- A* ---------- *)
+
+let astar preterm =
+  let module Ns = Strategy.NoStrategy in
+
+  let exit = ref false in
+
+  let process lambda =
+    if List.mem lambda ["exit"; "q"; "quit"] then
+      exit := true
+    else
+      let hst, g, steps = Ns.astar lambda in
+      let () = print_endline "Node map :" in
+      let () = Hashtbl.iter (fun k (v, _) -> 
+        print_endline (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)))) hst in
+      let () = print_newline () in
+      let () = print_endline "Graph :" in
+      let () = print_endline (Graph.Graph.to_string g) in
+      let () = print_newline () in
+      let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
+      let reverse_hst = Hashtbl.fold (fun k (v, _) acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
+      let file = open_out "results/astar_node_map.txt" in
+      let () = Hashtbl.iter (fun k (v, _) -> 
+        output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
+      let () = close_out file in
+      Graph.Graph.to_pdf g reverse_hst "astar_graph"; ()
       (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
   in
 
@@ -139,19 +181,21 @@ let () = print_endline "Enter 'exit', 'q' or 'quit' to leave the program"
 let rec mode_choice choice term strategy =
   match choice with
   | "exit" | "q" | "quit" -> exit 0
-  | "1" -> reduction_possibilities_viewer term
-  | "2" -> reduction_graph_viewer term
+  | "1" -> reduction_graph_viewer term
+  | "2" -> astar term
   | "3" -> reduction_with_chosen_strategy term strategy
-  | "4" -> extend_lambda_term term
-  | "5" -> test term
+  | "4" -> reduction_possibilities_viewer term
+  | "5" -> extend_lambda_term term
+  | "6" -> test term
   | _ ->
-    let () = print_endline "Enter desired mode :\n1 : All reduction possibilities viewer\n2 : Reduction graph viewer\n3 : Reduction with chosen strategy (Left Innermost or Left External)" in
+    let () = print_endline "Enter desired mode :\n1 : Reduction graph viewer\n2 : A*\n3 : Reduction with chosen strategy (Left Innermost or Left External)\n4 : All reduction possibilities viewer" in
     let () = print_string "> " in
     match read_line () with
     | "exit" | "q" | "quit" -> exit 0
-    | "1" -> reduction_possibilities_viewer ""
+    | "1" -> astar ""
     | "2" -> reduction_graph_viewer ""
     | "3" -> reduction_with_chosen_strategy "" ""
+    | "4" -> reduction_possibilities_viewer ""
     | _ -> print_endline "Invalid mode"; mode_choice "" "" ""
 
 let prechoice = try Sys.argv.(1) with | Invalid_argument _ -> ""

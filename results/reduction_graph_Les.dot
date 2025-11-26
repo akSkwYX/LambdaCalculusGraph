@@ -3,9 +3,84 @@ digraph G {
   node [shape=box, style=rounded, fontname="JetBrains Mono", fontsize=10, margin=0.08];
   edge [arrowsize=0.8];
 
-  n0 [label="λx0.λx1.λx2.(x1)((x0)(x1)(x2))"];
+  n0 [label="([P])([10])"];
+  n1 [label="λb0.λb1.((([10])(λb2.λb3.b3(b2b0)))(λb2.b1))(λb2.b2)"];
+  n2 [label="λb0.λb1.((λb2.(λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))b2))))))))))(λb2.b1))(λb2.b2)"];
+  n3 [label="λb0.λb1.((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1)))))))))))(λb2.b2)"];
+  n4 [label="λb0.λb1.(λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1))))))))))b0))(λb2.b2)"];
+  n5 [label="λb0.λb1.(λb2.b2)(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1))))))))))b0)"];
+  n6 [label="λb0.λb1.((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1))))))))))b0"];
+  n7 [label="λb0.λb1.(λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1)))))))))b0))b0"];
+  n8 [label="λb0.λb1.b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1)))))))))b0)"];
+  n9 [label="λb0.λb1.b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1))))))))b0))b0)"];
+  n10 [label="λb0.λb1.b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1))))))))b0))"];
+  n11 [label="λb0.λb1.b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1)))))))b0))b0))"];
+  n12 [label="λb0.λb1.b0(b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1)))))))b0)))"];
+  n13 [label="λb0.λb1.b0(b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1))))))b0))b0)))"];
+  n14 [label="λb0.λb1.b0(b0(b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1))))))b0))))"];
+  n15 [label="λb0.λb1.b0(b0(b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1)))))b0))b0))))"];
+  n16 [label="λb0.λb1.b0(b0(b0(b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1)))))b0)))))"];
+  n17 [label="λb0.λb1.b0(b0(b0(b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1))))b0))b0)))))"];
+  n18 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1))))b0))))))"];
+  n19 [label="λb0.λb1.b0(b0(b0(b0(b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))((λb3.λb4.b4(b3b0))(λb3.b1)))b0))b0))))))"];
+  n20 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(b0(((λb2.λb3.b3(b2b0))((λb2.λb3.b3(b2b0))(λb2.b1)))b0)))))))"];
+  n21 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(b0((λb2.b2(((λb3.λb4.b4(b3b0))(λb3.b1))b0))b0)))))))"];
+  n22 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(b0(b0(((λb2.λb3.b3(b2b0))(λb2.b1))b0))))))))"];
+  n23 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(b0(b0((λb2.b2((λb3.b1)b0))b0))))))))"];
+  n24 [label="λb0.λb1.b0(b0(b0(b0(b0(b0(b0(b0(b0((λb2.b1)b0)))))))))"];
+  n25 [label="[9]"];
 
-  n0 -> n0;
+  n0 -> n1;
+  n1 -> n2;
+  n2 -> n3;
+  n3 -> n4;
+  n4 -> n5;
+  n5 -> n6;
+  n6 -> n7;
+  n7 -> n8;
+  n8 -> n9;
+  n9 -> n10;
+  n10 -> n11;
+  n11 -> n12;
+  n12 -> n13;
+  n13 -> n14;
+  n14 -> n15;
+  n15 -> n16;
+  n16 -> n17;
+  n17 -> n18;
+  n18 -> n19;
+  n19 -> n20;
+  n20 -> n21;
+  n21 -> n22;
+  n22 -> n23;
+  n23 -> n24;
+  n24 -> n25;
+  n25 -> n25;
 
   { rank = same; n0; }
+  { rank = same; n1; }
+  { rank = same; n2; }
+  { rank = same; n3; }
+  { rank = same; n4; }
+  { rank = same; n5; }
+  { rank = same; n6; }
+  { rank = same; n7; }
+  { rank = same; n8; }
+  { rank = same; n9; }
+  { rank = same; n10; }
+  { rank = same; n11; }
+  { rank = same; n12; }
+  { rank = same; n13; }
+  { rank = same; n14; }
+  { rank = same; n15; }
+  { rank = same; n16; }
+  { rank = same; n17; }
+  { rank = same; n18; }
+  { rank = same; n19; }
+  { rank = same; n20; }
+  { rank = same; n21; }
+  { rank = same; n22; }
+  { rank = same; n23; }
+  { rank = same; n24; }
+  { rank = same; n25; }
 }
