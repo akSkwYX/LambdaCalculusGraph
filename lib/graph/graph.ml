@@ -12,7 +12,7 @@ module type Graph = sig
   val get_neighbors : int -> t -> int list
   val init_from_edges : (int * int) list -> t
   val to_string : t -> string
-  val to_pdf : t -> (int, int list) Hashtbl.t -> string -> unit
+  val to_pdf : t -> (int, int list) Hashtbl.t -> int list list -> string -> unit
 end
 
 module Graph : Graph = struct
@@ -100,7 +100,7 @@ module Graph : Graph = struct
     done;
     groups
 
-  let to_pdf (g : int list array) (hst : (int, int list) Hashtbl.t) (filename : string) : unit =
+  let to_pdf (g : int list array) (hst : (int, int list) Hashtbl.t) (path : int list list) (filename : string) : unit =
     let format_node n =
       try LambdaTerm.LambdaTerm.to_string @@ LambdaTerm.LambdaTerm.of_deBruijn (Hashtbl.find hst n)
       with Not_found -> string_of_int n
@@ -120,7 +120,10 @@ module Graph : Graph = struct
     Printf.fprintf oc "\n";
 
     Array.iteri (fun i nbrs ->
-      List.iter (fun j -> Printf.fprintf oc "  n%d -> n%d;\n" i j) nbrs
+      let i_node = Hashtbl.find hst i in
+      List.iter (fun j -> 
+        if List.mem i_node path && List.mem (Hashtbl.find hst j) path then Printf.fprintf oc "  n%d -> n%d [color=red style=\"bold\"];\n" i j
+        else Printf.fprintf oc "  n%d -> n%d;\n" i j) nbrs
     ) g;
     Printf.fprintf oc "\n";
 

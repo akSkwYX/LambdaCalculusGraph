@@ -1,3 +1,9 @@
+let ( #~ ) = Fun.compose
+
+module type Value = sig
+  val v : string
+end
+
 (* ---------- Tests ---------- *)
 
 let test _ =
@@ -7,109 +13,53 @@ let test _ =
   let () = print_endline ("Term : " ^ (Lis.Lt.to_string_tree term)) in
   let () = print_endline ("Term : " ^ (Lis.Lt.to_string term)) in ()
 
-(* ---------- All reduction possibilities ---------- *)
+(* ---------- Lambda tree viewer ---------- *)
 
-let reduction_possibilities_viewer preterm =
-  let module Ns = Strategy.NoStrategy in
-
-  let exit = ref false in
-
-  let process lambda =
-    if List.mem lambda ["exit"; "q"; "quit"] then
-      exit := true
-    else
-      let term = Ns.Lt.of_string lambda in
-      let () = print_endline ("Term : \n" ^ (Ns.Lt.to_string_tree term)) in
-      let reduce_possibilities = Ns.reduce_step term in
-      let () = print_endline "Reduction possibilities :" in
-      List.iter (fun t -> print_endline (Ns.Lt.to_string t)) reduce_possibilities
-  in
-
-  let () = print_endline "Lambda calculus reduction possibilities viewer" in
-  match preterm with
-  | "" ->
-    while not !exit do
-      let () = print_string "> " in
-      let lambda = read_line () in
-      process lambda
-    done
-  | _ -> process preterm
+module Lambda_tree_viewer (Term : Value) = struct
+  let exec () =
+    let module LambdaTerm = LambdaTerm.LambdaTerm in
+    let term = LambdaTerm.of_string Term.v in
+    let () = print_endline ("Term : \n" ^ (LambdaTerm.to_string_tree term)) in ()
+end
 
 (* ---------- Reduction graph ---------- *)
 
-let reduction_graph_viewer preterm =
-  let module Ns = Strategy.NoStrategy in
-
-  let exit = ref false in
-
-  let process lambda =
-    if List.mem lambda ["exit"; "q"; "quit"] then
-      exit := true
-    else
-      let hst, g = Ns.reduce_graph lambda in
-      let () = print_endline "Node map :" in
-      let () = Hashtbl.iter (fun k v -> 
-        print_endline (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)))) hst in
-      let () = print_newline () in
-      let () = print_endline "Graph :" in
-      let () = print_endline (Graph.Graph.to_string g) in
-      let reverse_hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
-      let file = open_out "results/node_map.txt" in
-      let () = Hashtbl.iter (fun k v -> 
-        output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
-      let () = close_out file in
-      Graph.Graph.to_pdf g reverse_hst "reduction_graph"; ()
-      (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
-  in
-
-  let () = print_endline "Lambda calculus reduction graph viewer" in
-  match preterm with
-  | "" ->
-    while not !exit do
-      let () = print_string "> " in
-      let lambda = read_line () in
-      process lambda
-    done
-  | _ -> process preterm
+module Reduction_graph_viewer (Term : Value) (Strategy : Strategy.NoStrategy) = struct
+  let exec () = 
+    let hst, g = Strategy.reduce_graph Term.v in
+    let reverse_hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
+    (* let file = open_out "results/node_map.txt" in *)
+    (* let () = Hashtbl.iter (fun k v ->  *)
+    (*   output_string file (string_of_int v ^ " : " ^ (Strategy.Lt.to_string (Strategy.Lt.of_deBruijn k)) ^ "\n")) hst in *)
+    (* let () = close_out file in *)
+    Graph.Graph.to_pdf g reverse_hst [] "reduction_graph"; ()
+    (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
+end
 
 (* ---------- A* ---------- *)
 
-let astar preterm =
-  let module Ns = Strategy.NoStrategy in
+module Astar (Term : Value) (Strategy : Strategy.NoStrategy) (Construct_graph : Value) = struct
+  let exec () =
+    let hst, g, terms, steps = Strategy.astar (bool_of_string Construct_graph.v) Term.v in
+    let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
+    let () = print_endline ("Order of graph : " ^ (string_of_int (Graph.Graph.order g))) in
+    let () = print_endline ("Size of graph : " ^ (string_of_int (Graph.Graph.size g))) in
+    let () = print_endline "Path :" in
+    let () = List.iter (print_endline #~ Strategy.Lt.to_string) terms in
+    if bool_of_string Construct_graph.v then
+      begin
+      let reverse_hst = Hashtbl.fold (fun k (v, _, _) acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
+      Graph.Graph.to_pdf g reverse_hst (List.map Strategy.Lt.deBruijn_index terms) "astar_graph"
+      end
+end
 
-  let exit = ref false in
-
-  let process lambda =
-    if List.mem lambda ["exit"; "q"; "quit"] then
-      exit := true
-    else
-      let hst, g, steps = Ns.astar lambda in
-      let () = print_endline "Node map :" in
-      let () = Hashtbl.iter (fun k (v, _) -> 
-        print_endline (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)))) hst in
-      let () = print_newline () in
-      let () = print_endline "Graph :" in
-      let () = print_endline (Graph.Graph.to_string g) in
-      let () = print_newline () in
-      let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
-      let reverse_hst = Hashtbl.fold (fun k (v, _) acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
-      let file = open_out "results/astar_node_map.txt" in
-      let () = Hashtbl.iter (fun k (v, _) -> 
-        output_string file (string_of_int v ^ " : " ^ (Ns.Lt.to_string (Ns.Lt.of_deBruijn k)) ^ "\n")) hst in
-      let () = close_out file in
-      Graph.Graph.to_pdf g reverse_hst "astar_graph"; ()
-      (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
-  in
-
-  let () = print_endline "Lambda calculus reduction graph viewer" in
-  match preterm with
-  | "" ->
-    while not !exit do
-      let () = print_string "> " in
-      let lambda = read_line () in
-      process lambda
-    done
-  | _ -> process preterm
+module IDAstar (Term : Value) (Strategy : Strategy.NoStrategy) = struct
+  let exec () =
+    let terms, steps = Strategy.idastar Term.v in
+    let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
+    let () = print_endline "Path :" in
+    List.iter (print_endline #~ Strategy.Lt.to_string) terms
+end
 
 (* ---------- DeBruijn tests ---------- *)
 
@@ -132,73 +82,90 @@ let extend_lambda_term lambda =
 
 (* ---------- Reduction ---------- *)
 
-let reduction_with_chosen_strategy preterm strategy =
-  let module Lis = Strategy.LeftInnermostStrategy in
-  let module Les = Strategy.LeftExternalStrategy in
-
-  let rec choose_strategy () =
-    let () = print_endline "Select reduction strategy :\n1 : Left Innermost Strategy\n2 : Left External Strategy" in
-    match read_line () with
-    | "exit" | "q" | "quit" -> exit 0
-    | "1" -> "Lis"
-    | "2" -> "Les"
-    | _ -> print_endline "Invalid strategy"; choose_strategy ()
-  in
-  let strategy = match strategy with | "" -> choose_strategy () | _ -> strategy in
-
-  let exit = ref false in
-
-  let process lambda =
-    if List.mem lambda ["exit"; "q"; "quit"] then
-      exit := true
-    else
-      let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
-      if strategy = "Lis" then
-        let (hst, g) = Lis.reduce_string_graph lambda in
-        Graph.Graph.to_pdf g (reverse_hst hst) "reduction_graph_Lis";
-        let _ = Sys.command "xdg-open results/reduction_graph_Lis.pdf &" in ()
-      else
-        let (hst, g) = Les.reduce_string_graph lambda in
-        Graph.Graph.to_pdf g (reverse_hst hst) "reduction_graph_Les";
-        let _ = Sys.command "xdg-open results/reduction_graph_Les.pdf &" in ()
-  in
-
-  let () = print_endline "Lambda calculus reduction with chosen strategy" in
-
-  match preterm with
-  | "" ->
-    while not !exit do
-      let () = print_string "> " in
-      let lambda = read_line () in
-      process lambda
-    done
-  | _ -> process preterm
+module Reduction_with_chosen_strategy (Term : Value) (Strategy : Strategy.Strategy) = struct
+  let exec () =
+    let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
+    let hst, g, steps = Strategy.reduce_graph Term.v in
+    Graph.Graph.to_pdf g (reverse_hst hst) [] ("reduction_graph_" ^ Strategy.name);
+    print_endline ("Number of steps to normal form : " ^ (string_of_int steps))
+    (* let _ = Sys.command "xdg-open results/reduction_graph_WLis.pdf &" in () *)
+end
 
 (* ---------- Launch ---------- *)
 
 let () = print_endline "Starting Lambda Calculus"
 let () = print_endline "Enter 'exit', 'q' or 'quit' to leave the program"
-let rec mode_choice choice term strategy =
+let mode_choice choice term strategy construct_graph =
   match choice with
-  | "exit" | "q" | "quit" -> exit 0
-  | "1" -> reduction_graph_viewer term
-  | "2" -> astar term
-  | "3" -> reduction_with_chosen_strategy term strategy
-  | "4" -> reduction_possibilities_viewer term
-  | "5" -> extend_lambda_term term
-  | "6" -> test term
-  | _ ->
-    let () = print_endline "Enter desired mode :\n1 : Reduction graph viewer\n2 : A*\n3 : Reduction with chosen strategy (Left Innermost or Left External)\n4 : All reduction possibilities viewer" in
-    let () = print_string "> " in
-    match read_line () with
-    | "exit" | "q" | "quit" -> exit 0
-    | "1" -> astar ""
-    | "2" -> reduction_graph_viewer ""
-    | "3" -> reduction_with_chosen_strategy "" ""
-    | "4" -> reduction_possibilities_viewer ""
-    | _ -> print_endline "Invalid mode"; mode_choice "" "" ""
+  | "1" -> 
+    (match strategy with
+    | "Lo" -> 
+      let module M = Reduction_graph_viewer (struct let v = term end) (Strategy.LONoStrategy) in
+      M.exec ()
+    | "Li" -> 
+      let module M = Reduction_graph_viewer (struct let v = term end) (Strategy.LINoStrategy) in
+      M.exec ()
+    | "Wlo" ->
+      let module M = Reduction_graph_viewer (struct let v = term end) (Strategy.WLONoStrategy) in
+      M.exec ()
+    | "Wli" ->
+      let module M = Reduction_graph_viewer (struct let v = term end) (Strategy.WLINoStrategy) in
+      M.exec ()
+    | _ -> raise (Invalid_argument "Not a valid strategy"))
+  | "2" -> 
+    (match strategy with
+    | "Lo" ->
+      let module M = Astar (struct let v = term end) (Strategy.LONoStrategy) (struct let v = string_of_bool construct_graph end) in
+      M.exec ()
+    | "Li" ->
+      let module M = Astar (struct let v = term end) (Strategy.LINoStrategy) (struct let v = string_of_bool construct_graph end) in
+      M.exec ()
+    | "Wlo" ->
+      let module M = Astar (struct let v = term end) (Strategy.WLONoStrategy) (struct let v = string_of_bool construct_graph end) in
+      M.exec ()
+    | "Wli" ->
+      let module M = Astar (struct let v = term end) (Strategy.WLINoStrategy) (struct let v = string_of_bool construct_graph end) in
+      M.exec ()
+    | _ -> raise (Invalid_argument "Not a valid strategy"))
+  | "3" ->
+    (match strategy with
+    | "Lo" ->
+      let module M = IDAstar (struct let v = term end) (Strategy.LONoStrategy) in
+      M.exec ()
+    | "Li" ->
+      let module M = IDAstar (struct let v = term end) (Strategy.LINoStrategy) in
+      M.exec ()
+    | "Wlo" ->
+      let module M = IDAstar (struct let v = term end) (Strategy.WLONoStrategy) in
+      M.exec ()
+    | "Wli" ->
+      let module M = IDAstar (struct let v = term end) (Strategy.WLINoStrategy) in
+      M.exec ()
+    | _ -> raise (Invalid_argument "Not a valid strategy"))
+  | "4" -> 
+    (match strategy with
+    | "Lo" -> 
+      let module M = Reduction_with_chosen_strategy (struct let v = term end) (Strategy.LeftOutermostStrategy) in
+      M.exec ()
+    | "Li" ->
+      let module M = Reduction_with_chosen_strategy (struct let v = term end) (Strategy.LeftInnermostStrategy) in
+      M.exec ()
+    | "Wlo" ->
+      let module M = Reduction_with_chosen_strategy (struct let v = term end) (Strategy.WeakLeftOutermostStrategy) in
+      M.exec ()
+    | "Wli" ->
+      let module M = Reduction_with_chosen_strategy (struct let v = term end) (Strategy.WeakLeftInnermostStrategy) in
+      M.exec  ()
+    | _ -> raise (Invalid_argument "Not a valid strategy"))
+  | "5" -> 
+    let module M = Lambda_tree_viewer (struct let v = term end) in
+    M.exec ()
+  | "6" -> extend_lambda_term term
+  | "7" -> test term
+  | _ -> raise (Invalid_argument "Not a valid choice")
 
 let prechoice = try Sys.argv.(1) with | Invalid_argument _ -> ""
 let preterm = try Sys.argv.(2) with | Invalid_argument _ -> ""
 let strategy = try Sys.argv.(3) with | Invalid_argument _ -> ""
-let () = mode_choice prechoice preterm strategy
+let construct_graph = try Sys.argv.(4) = "true" with | Invalid_argument _ -> false
+let () = mode_choice prechoice preterm strategy construct_graph

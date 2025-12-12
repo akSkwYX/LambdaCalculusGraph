@@ -16,10 +16,7 @@ module type LambdaTerm = sig
   val to_ugly_string : t -> string
   val of_string : string -> t
 
-  (* Compositions *)
   val deBruijn_to_string : int list -> string
 end
 
-(* module Left : LambdaTerm *)
-(* module Right : LambdaTerm *)
 module LambdaTerm : LambdaTerm

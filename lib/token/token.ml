@@ -3,7 +3,7 @@ module type Token = sig
     Var of string | Lambda | LParen | RParen | Dot 
     | Coma | N of int
     | Number of int | Succ | Plus | Time | True | False | LAngle | RAngle
-    | P1 | P2 | P | IsZero | Y
+    | P1 | P2 | P | IsZero | Y | I
   and t = {lexeme : lexeme; index : int}
 
   val index : t -> int
@@ -23,7 +23,7 @@ module Token = struct
     Var of string | Lambda | LParen | RParen | Dot 
     | Coma | N of int
     | Number of int | Succ | Plus | Time | True | False | LAngle | RAngle
-    | P1 | P2 | P | IsZero | Y
+    | P1 | P2 | P | IsZero | Y | I
   and t = {lexeme : lexeme; index : int}
 
   exception Lexing_error of string
@@ -55,6 +55,7 @@ module Token = struct
     | { lexeme = P; index = _ } -> "[P]"
     | { lexeme = IsZero; index = _ } -> "[IsZero]"
     | { lexeme = Y; index = _ } -> "[Y]"
+    | { lexeme = I; index = _ } -> "[I]"
 
   let to_ugly_string = function
     | { lexeme = Var v; index = _ } -> "{ lexeme = Var \"" ^ v ^ "\"; index = Token.index t }"
@@ -77,6 +78,7 @@ module Token = struct
     | { lexeme = P; index = _ } -> "{ lexeme = P; index = Token.index t }"
     | { lexeme = IsZero; index = _ } -> "{ lexeme = IsZero; index = Token.index t}"
     | { lexeme = Y; index = _ } -> "{ lexeme = Y; index = Token.index t}"
+    | { lexeme = I; index = _ } -> "{ lexeme = I; index = Token.index t }"
 
   let rec find_n s len acc pos =
     if pos < len then
@@ -119,6 +121,7 @@ module Token = struct
         | "P" -> P
         | "IsZero" -> IsZero
         | "Y" -> Y
+        | "I" -> I
         | _ ->
           let n = try int_of_string inner with
             | Failure _ -> raise (Lexing_error ("Invalid token in brackets at position " ^ string_of_int current))

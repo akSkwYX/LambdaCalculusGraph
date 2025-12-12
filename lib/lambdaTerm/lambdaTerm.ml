@@ -45,7 +45,7 @@ module Base = struct
         to_string_tree ~indent:(indent+1) t2 ^ "\n" ^
         indentation ^ ")\n"
 
-  let compress = function
+  let rec compress = function
     | Fun (n1, Fun (f1, Fun (x1, App (Var f2, App (App (Var n2, Var f3), Var x2)))))
       when n1 = n2 && f1 = f2 && f2 = f3 && x1 = x2 ->
       "[S]"
@@ -76,6 +76,8 @@ module Base = struct
     | App (Fun (g1, Fun (h1, App (Var h2, App (Var g2, App (Var g3, Var h3))))), Fun (g1', Fun (h1', App (Var h2', App (Var g2', App (Var g3', Var h3'))))))
       when g1 = g2 && g2 = g3 && h1 = h2 && h2 = h3 && g1' = g2' && g2' = g3' && h1' = h2' && h2' = h3' ->
       "[Y]"
+    | Fun (x1, Var x2) when x1 = x2 ->
+      "[I]"
     | Fun (f, Fun (x, n)) ->
       let rec is_number k = function
         | Var v when v = x -> true, k
@@ -85,9 +87,11 @@ module Base = struct
       let is_num, n = is_number 0 n in
       if is_num then "[" ^ string_of_int n ^ "]"
       else raise (Invalid_argument "Cannot compress term")
+    | Fun (z1, App (App (Var z2, u), v)) when z1 = z2 ->
+      "<" ^ to_string u ^ "," ^ to_string v ^ ">"
     | _ -> raise (Invalid_argument "Cannot compress term")
 
-  let rec to_string t =
+  and to_string t =
     try compress t with
     | Invalid_argument _ ->
       match t with
@@ -96,10 +100,10 @@ module Base = struct
       | App (t1, t2) ->
         (match t1 with
         | Var v -> v
-        | _ -> "(" ^ to_string t1 ^ ")") ^
+        | _ -> (try compress t1 with | Invalid_argument _ -> "(" ^ to_string t1 ^ ")")) ^
         (match t2 with
         | Var v -> v
-        | _ -> "(" ^ to_string t2 ^ ")")
+        | _ -> (try compress t2 with | Invalid_argument _ -> "(" ^ to_string t2 ^ ")"))
 
   (* -1 : free var 
      n >= 0 : bound var with id n
@@ -228,6 +232,8 @@ module LambdaTerm : LambdaTerm = struct
       Fun ("n", App (Var "n", App (Fun ("z", Fun ("t", Fun ("f", Var "f"))), Fun ("t", Fun ("f", Var "t")))))
     | Y ->
       App (Fun ("g", Fun ("h", App (Var "h", App (Var "g", App (Var "g", Var "h"))))), Fun ("g", Fun ("h", App (Var "h", App (Var "g", App (Var "g", Var "h"))))))
+    | I ->
+      Fun ("x", Var "x")
     | _ -> raise (Parsing_error ("[ " ^ (string_of_int (Token.index t)) ^ " ] Cannot extend token: " ^ (Token.to_string t)))
 
   let of_string s =
@@ -241,6 +247,7 @@ module LambdaTerm : LambdaTerm = struct
       | h :: t -> drop_parens ~acc:(h :: acc) ~i:i t
     in
 
+    (* Ca marche probablement pas ça *)
     let rec parse_couple ?(t1=[]) ?(t2=[]) ?(i=0) ?(b=false) 
       : Token.t list -> Token.t list * Token.t list * Token.t list = function
       | [] -> raise (Parsing_error "Unmatched opening angle bracket")
@@ -277,7 +284,8 @@ module LambdaTerm : LambdaTerm = struct
     | ({lexeme=P2; _} as t) :: rest
     | ({lexeme=P; _} as t) :: rest 
     | ({lexeme=IsZero; _} as t) :: rest
-    | ({lexeme=Y; _} as t) :: rest ->
+    | ({lexeme=Y; _} as t) :: rest
+    | ({lexeme=I; _} as t) :: rest ->
       (match rest with
       | [] -> extend t
       | _ -> App (extend t, parse rest))
