@@ -16,6 +16,12 @@ module type LambdaTerm = sig
   val to_ugly_string : t -> string
   val of_string : string -> t
 
+  val free_vars : t -> string list
+  val bound_vars : t -> string list
+  val substitute : string -> t -> t -> t
+
+  val redex_list : t -> t list
+
   val deBruijn_to_string : int list -> string
 end
 

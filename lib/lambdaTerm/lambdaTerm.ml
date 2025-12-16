@@ -9,8 +9,19 @@ module type LambdaTerm = sig
 
   exception Parsing_error of string
 
+  val alpha_eq : t -> t -> bool
   val eq : t -> t -> bool
-  val compare_length : t -> t -> int
+
+  val iter : (t -> unit) -> t -> unit
+  val map : (t -> t) -> t -> t
+  val fold_left : ('a -> t -> 'a) -> 'a -> t -> 'a
+  val filter : (t -> bool) -> t -> t list
+
+  val length : t -> int
+
+  val free_vars : t -> string list
+  val bound_vars : t -> string list
+  val substitute : string -> t -> t -> t
 
   val deBruijn_index : ?binders:string list -> t -> int list
   val of_deBruijn : ?binders:int -> int list -> t
@@ -21,16 +32,114 @@ module type LambdaTerm = sig
 
   val of_string : string -> t
 
+  val redex_list : t -> t list
+
   (* Compositions *)
   val deBruijn_to_string : int list -> string
 end
 
-module Base = struct
+module LambdaTerm : LambdaTerm = struct
   module Token = Token
 
   type t = Var of string | Fun of string * t | App of t * t
 
   exception Parsing_error of string
+
+  let rec alpha_eq t1 t2 =
+    let check_vars v1 v2 env1 env2 =
+      try Hashtbl.find env1 v1 = v2 with
+      | Not_found -> Hashtbl.mem env2 v2
+    in
+    let rec aux t1 t2 (env1 : (string,string) Hashtbl.t) env2 =
+      match t1, t2 with
+      | Var v1, Var v2 -> check_vars v1 v2 env1 env2
+      | Fun (v1, body1), Fun (v2, body2) ->
+        begin
+        check_vars v1 v2 env1 env2 &&
+        let () = Hashtbl.add env1 v1 v2 in
+        let () = Hashtbl.add env2 v2 v1 in
+        aux body1 body2 env1 env2
+        end
+      | App (s1, s2), App (t1, t2) -> aux s1 t1 env1 env2 && aux s2 t2 env1 env2
+      | _ -> false
+    in
+    aux t1 t2 (Hashtbl.create 10) (Hashtbl.create 10)
+
+  let rec eq t1 t2 =
+    match t1, t2 with
+    | Var v1, Var v2 -> v1 = v2
+    | Fun (v1, body1), Fun (v2, body2) -> v1 = v2 && eq body1 body2
+    | App (s1, s2), App (t1, t2) -> eq s1 t1 && eq s2 t2
+    | _ -> false
+
+  let rec iter f term =
+    match term with
+    | Var _ -> f term
+    | Fun (_, body) -> f term; iter f body
+    | App (t1, t2) -> f term; iter f t1; iter f t2
+
+  let rec map f term =
+    match term with
+    | Var _ -> f term
+    | Fun (v, body) -> f (Fun (v, map f body))
+    | App (t1, t2) -> f (App (map f t1, map f t2))
+
+  let rec fold_left f acc term =
+    match term with
+    | Var _ -> f acc term
+    | Fun (_, body) -> fold_left f (f acc term) body
+    | App (t1, t2) -> fold_left f (fold_left f (f acc term) t1) t2
+
+  let rec filter f term =
+    match term with
+    | Var _ -> if f term then [term] else []
+    | Fun (_, body) ->
+      let rest = filter f body in
+      if f term then term :: rest else rest
+    | App (t1, t2) ->
+      let rest1 = filter f t1 in
+      let rest2 = filter f t2 in
+      if f term then term :: (rest1 @ rest2) else (rest1 @ rest2)
+
+  let length = fold_left (fun acc _ -> acc + 1) 0
+
+  let rec free_vars = function
+    | Var v -> [v]
+    | Fun (v, body) -> List.filter ((<>) v) (free_vars body)
+    | App (t1,t2) -> free_vars t1 @ free_vars t2
+
+  let rec bound_vars = function
+    | Var _ -> []
+    | Fun (v, body) -> v :: (bound_vars body)
+    | App (t1,t2) -> bound_vars t1 @ bound_vars t2
+
+  let find_fresh_var used_vars =
+    let rec aux n =
+      let candidate = "x" ^ string_of_int n in
+      if List.exists ((=) candidate) used_vars then aux (n+1)
+      else candidate
+    in
+    aux 0
+
+  let rec substitute (x : string) (with_v : t) (in_u : t) =
+    let free_in_v = free_vars with_v in
+    match in_u with 
+    | Var v when v = x -> with_v
+    | Var _ -> in_u
+    | Fun (v, _) when v = x -> in_u
+    | Fun (v, body) when List.exists ((=) v) free_in_v ->
+      let used_vars = (free_in_v @ (free_vars body) @ (bound_vars body)) in
+      let fresh_v = find_fresh_var used_vars in
+      let renamed_body = substitute v (Var fresh_v) body in
+      Fun (fresh_v, substitute x with_v renamed_body)
+    | Fun (v, body) -> Fun (v, substitute x with_v body)
+    | App (t1,t2) -> App (substitute x with_v t1, substitute x with_v t2)
+
+  let rec redex_list = function
+    | Var _ -> []
+    | Fun (_, body) -> redex_list body
+    | App (Fun(x, body), t2) -> App (Fun(x, body), t2) :: ((redex_list body) @ (redex_list t2))
+    | App (t1, t2) -> redex_list t1 @ redex_list t2
 
   let rec to_string_tree ?(indent=0) term =
     let indentation = String.make (indent * 2) ' ' in
@@ -187,22 +296,7 @@ module Base = struct
     | [] -> raise (Parsing_error "No parameters found when constructing function")
     | h :: t -> (Fun (h, aux t))
 
-
   let deBruijn_to_string = to_string #~ of_deBruijn
-end
-
-module LambdaTerm : LambdaTerm = struct
-  include Base
-
-  (* let compose_lambda t (l : Token.t list) = *)
-  (*   match l with *)
-  (*   | {lexeme=N n; _} :: rest -> *)
-  (*     let rec aux = function *)
-  (*     | 0 -> Var "t" *)
-  (*     | k -> App (t, aux (k-1)) *)
-  (*     in *)
-  (*     Fun ("t", aux n), rest *)
-  (*   | _ -> t, l *)
 
   let extend (t : Token.t) =
     match t.lexeme with

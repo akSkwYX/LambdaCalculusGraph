@@ -29,55 +29,13 @@ module type NoStrategy = sig
   val idastar : string -> Lt.t list * int
 end
 
-module type BaseStrategy = sig
-  module Lt : LambdaTerm.LambdaTerm
-
-  val substitute : string -> Lt.t -> Lt.t -> Lt.t
-end
-
 module type PartialStrategy = sig
-  include BaseStrategy
+  module Lt : LambdaTerm.LambdaTerm
 
   val name : string
 
   val is_normal : Lt.t -> bool
   val reduce_step : Lt.t -> Lt.t
-end
-
-module BaseStrategy (Lt : LambdaTerm.LambdaTerm) : BaseStrategy = struct
-  module Lt = Lt
-
-  let rec free_vars = function
-    | Lt.Var v -> [v]
-    | Lt.Fun (v, body) -> List.filter ((<>) v) (free_vars body)
-    | Lt.App (t1,t2) -> free_vars t1 @ free_vars t2
-
-  let rec bound_vars = function
-    | Lt.Var _ -> []
-    | Lt.Fun (v, body) -> v :: (bound_vars body)
-    | Lt.App (t1,t2) -> bound_vars t1 @ bound_vars t2
-
-  let find_fresh_var used_vars =
-    let rec aux n =
-      let candidate = "x" ^ string_of_int n in
-      if List.exists ((=) candidate) used_vars then aux (n+1)
-      else candidate
-    in
-    aux 0
-
-  let rec substitute (x : string) (with_v : Lt.t) (in_u : Lt.t) =
-    let free_in_v = free_vars with_v in
-    match in_u with 
-    | Lt.Var v when v = x -> with_v
-    | Lt.Var _ -> in_u
-    | Lt.Fun (v, _) when v = x -> in_u (* do not substitute bound variables *)
-    | Lt.Fun (v, body) when List.exists ((=) v) free_in_v ->
-      let used_vars = (free_in_v @ (free_vars body) @ (bound_vars body)) in
-      let fresh_v = find_fresh_var used_vars in
-      let renamed_body = substitute v (Var fresh_v) body in
-      Lt.Fun (fresh_v, substitute x with_v renamed_body)
-    | Lt.Fun (v, body) -> Lt.Fun (v, substitute x with_v body)
-    | Lt.App (t1,t2) -> App (substitute x with_v t1, substitute x with_v t2)
 end
 
 module FStrategy (Ps : PartialStrategy) : Strategy = struct
@@ -138,7 +96,7 @@ module FStrategy (Ps : PartialStrategy) : Strategy = struct
 end
 
 module PartialLeftInnermostStrategy : PartialStrategy = struct
-  include BaseStrategy(LambdaTerm.LambdaTerm)
+  module Lt = LambdaTerm.LambdaTerm
 
   let name = "Li"
 
@@ -155,7 +113,7 @@ module PartialLeftInnermostStrategy : PartialStrategy = struct
       Lt.Fun (v, reduce_step body)
     | Lt.App (Lt.Fun (v, body), t2) ->
       if is_normal body && is_normal t2 then
-        substitute v t2 body
+        Lt.substitute v t2 body
       else if is_normal body then
         Lt.App (Lt.Fun (v, body), reduce_step t2)
       else
@@ -170,7 +128,7 @@ end
 module LeftInnermostStrategy : Strategy = FStrategy(PartialLeftInnermostStrategy)
 
 module PartialWeakLeftInnermostStrategy : PartialStrategy = struct
-  include BaseStrategy(LambdaTerm.LambdaTerm)
+  module Lt = LambdaTerm.LambdaTerm
 
   let name = "Wli"
 
@@ -186,7 +144,7 @@ module PartialWeakLeftInnermostStrategy : PartialStrategy = struct
     | Lt.Fun (v, body) -> Lt.Fun (v, body)
     | Lt.App (Lt.Fun (v, body), t2) ->
       if is_normal body && is_normal t2 then
-        substitute v t2 body
+        Lt.substitute v t2 body
       else if is_normal body then
         Lt.App (Lt.Fun (v, body), reduce_step t2)
       else
@@ -201,7 +159,7 @@ end
 module WeakLeftInnermostStrategy : Strategy = FStrategy(PartialWeakLeftInnermostStrategy)
 
 module PartialLeftOutermostStrategy : PartialStrategy = struct
-  include BaseStrategy(LambdaTerm.LambdaTerm)
+  module Lt = LambdaTerm.LambdaTerm
 
   let name = "Lo"
 
@@ -215,7 +173,7 @@ module PartialLeftOutermostStrategy : PartialStrategy = struct
     let rec aux : Lt.t -> int * Lt.t = function
       Var v -> -1, Var v
     | Fun (v, body) -> let lvl, res = aux body in (if lvl = -1 then lvl else lvl + 1), Fun (v, res)
-    | App (Fun (v, body),t2) -> 0, substitute v t2 body
+    | App (Fun (v, body),t2) -> 0, Lt.substitute v t2 body
     | App (t1, t2) ->
       let lvl1, res1 = aux t1 in
       let lvl2, res2 = aux t2 in
@@ -229,7 +187,7 @@ end
 module LeftOutermostStrategy : Strategy = FStrategy(PartialLeftOutermostStrategy)
 
 module PartialWeakLeftOutermostStrategy : PartialStrategy = struct
-  include BaseStrategy(LambdaTerm.LambdaTerm)
+  module Lt = LambdaTerm.LambdaTerm
 
   let name = "Wlo"
 
@@ -243,7 +201,7 @@ module PartialWeakLeftOutermostStrategy : PartialStrategy = struct
     let rec aux : Lt.t -> int * Lt.t = function
       Var v -> -1, Var v
     | Fun (v, body) -> -1, Fun (v, body)
-    | App (Fun (v, body),t2) -> 0, substitute v t2 body
+    | App (Fun (v, body),t2) -> 0, Lt.substitute v t2 body
     | App (t1, t2) ->
       let lvl1, res1 = aux t1 in
       let lvl2, res2 = aux t2 in
@@ -257,7 +215,7 @@ end
 module WeakLeftOutermostStrategy : Strategy = FStrategy(PartialWeakLeftOutermostStrategy)
 
 module FNoStrategy (S : Strategy) :NoStrategy = struct
-  include (BaseStrategy(LambdaTerm.LambdaTerm) : BaseStrategy)
+  module Lt = S.Lt
   module S = S
 
   let rec is_normal = function
@@ -270,7 +228,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     | Var _ -> []
     | Fun (v, body) -> List.map ((fun t -> Fun (v, t)) : Lt.t -> Lt.t) (reduce_step body)
     | App (Fun (v, body), t2) ->
-      substitute v t2 body :: (List.map (fun t -> Lt.App (Fun (v, t), t2)) (reduce_step body)) @
+      Lt.substitute v t2 body :: (List.map (fun t -> Lt.App (Fun (v, t), t2)) (reduce_step body)) @
       (List.map (fun t -> Lt.App (Fun (v, body), t)) (reduce_step t2))
     | App (t1, t2) ->
       (List.map (fun t -> Lt.App (t, t2)) (reduce_step t1)) @
@@ -368,9 +326,64 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
   (* Non admissible : factoriel 1 *)
   let [@warning "-32"] h_leftoutermost = LeftOutermostStrategy.distance #~ LeftOutermostStrategy.Lt.of_deBruijn
 
+  
+  let rec sel i =
+    if i = 1 then sel_1
+    else if i = 2 then sel_2
+    else sel_3
+    (* else sel_4 *)
+
+  and sel_1 _ = None
+
+  and sel_2 : Lt.t -> int option = function
+    | Var _ -> Some 0
+    | Fun (x, body) -> if List.mem x (Lt.free_vars @@ brack 2 body) then Some 1 else None
+    | App _ -> None
+
+  and sel_3 : Lt.t -> int option = function
+    | Var _ -> Some 0
+    | Fun (x, body) -> if List.mem x (Lt.free_vars @@ brack 3 body) then Some 1
+                       else (match sel_3 body with | None -> None | Some x when x > 0 -> Some (x + 1) | _ -> Some 0)
+    | App (t1, _) -> (match sel_3 t1 with | Some x when x <> 1 -> Some (x - 1) | _ -> None)
+
+  (* Not sure I understood what is lengthtail *)
+  (* and sel_4 : Lt.t -> int option = function *)
+  (*   | Var _ -> Some 0 *)
+  (*   | Fun (x, body) -> if List.mem x (Lt.free_vars @@ brack 4 body) then Some 1 *)
+  (*                      else (match sel_4 body with | None -> None | Some x when x > 0 -> Some (x+1) | _ -> Some 0) *)
+  (*   | App (t1, t2) -> (match sel_4 t1 with  *)
+  (*     | Some x when x <> 1 -> Some (x-1)  *)
+  (*     | Some 1 ->  *)
+  (*       (match sel_4 t2 with | Some sel_4_t2 -> *)
+  (*         (match lengthtail t1 with *)
+  (*         | Some x when sel_4_t2 > x -> Some (sel_4_t2 - x) *)
+  (*         | _ -> None) *)
+  (*       | _ -> None) *)
+  (*     | _ -> None) *)
+  (**)
+  (* and lengthtail = () *)
+
+  and brack i = function
+    | Var x -> Var x
+    | Fun (x, body) -> Fun (x, brack i body)
+    | App (t1, t2) -> 
+      match sel i t2 with 
+      | Some 1 -> App (brack i t1, brack i t2) 
+      | _ -> App (brack i t1, )
+
+  let [@warning "-32"] h_spine_redex i t_db =
+    let t = Lt.of_deBruijn t_db in
+    let () = print_endline ("Term before transform: " ^ Lt.to_string t) in
+    let redexs = List.map Lt.deBruijn_index (Lt.redex_list t) in
+    let () = print_endline ("Redexs before transform: " ^ String.concat ", " (List.map Lt.deBruijn_to_string redexs)) in
+    let redexs_after_transform = List.map Lt.deBruijn_index (Lt.redex_list (brack i t)) in
+    let () = print_endline ( "Term after transform: " ^ Lt.to_string (brack i t)) in
+    let () = print_endline ("Redexs after transform: " ^ String.concat ", " (List.map Lt.deBruijn_to_string redexs_after_transform)) in
+    let redexs_residual = List.filter (fun t -> List.mem t redexs_after_transform) redexs in
+    List.length redexs_residual
 
   let astar construct_graph s =
-    let h = h_redex_left_count in
+    let h = h_spine_redex 3 in
     let term_db = Lt.deBruijn_index (Lt.of_string s) in
     let term = Lt.of_deBruijn term_db in
     let module Queue = Heap.Queue in
@@ -405,6 +418,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
             (if construct_graph then Graph.add_edge node_t node_next_t !graph);
             if d_t <= d_next_t then
               (Hashtbl.replace node_map next_t_db (node_next_t, d_t + 1, t_db);
+              print_endline (string_of_int @@ h next_t_db);
               Queue.change_or_insert next_t_db (d_t + 1 + (h next_t_db)) q)
             else
               q)
@@ -412,6 +426,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
             (if construct_graph then (graph := Graph.force_add_edge node_t !node_id !graph);
             Hashtbl.add node_map next_t_db (!node_id, d_t+1, t_db);
             (if construct_graph then node_id := !node_id + 1);
+            print_endline (string_of_int @@ h next_t_db);
             Queue.insert next_t_db (d_t + 1 + (h next_t_db)) q)
         ) q next_ts)
     in
@@ -428,7 +443,8 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       | [] -> []
       | father -> 
         let (_,_,f) = Hashtbl.find node_map father in
-        Lt.of_deBruijn father :: path f
+        if List.equal (=) father f then []
+        else Lt.of_deBruijn father :: path f
     in
     node_map, !graph, (List.rev (Lt.of_deBruijn normal_term_db :: path n)), s
 

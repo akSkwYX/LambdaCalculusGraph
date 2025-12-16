@@ -165,7 +165,8 @@ let mode_choice choice term strategy construct_graph =
   | _ -> raise (Invalid_argument "Not a valid choice")
 
 let prechoice = try Sys.argv.(1) with | Invalid_argument _ -> ""
-let preterm = try Sys.argv.(2) with | Invalid_argument _ -> ""
-let strategy = try Sys.argv.(3) with | Invalid_argument _ -> ""
-let construct_graph = try Sys.argv.(4) = "true" with | Invalid_argument _ -> false
+let strategy = try Sys.argv.(2) with | Invalid_argument _ -> ""
+let construct_graph = try Sys.argv.(3) = "true" with | Invalid_argument _ -> false
+let preterm = try Sys.argv.(4) with | Invalid_argument _ -> ""
+let () = print_endline preterm
 let () = mode_choice prechoice preterm strategy construct_graph
