@@ -2,3 +2,8 @@
  (public_name main)
  (name main)
  (libraries graph strategy lambdaTerm token))
+
+(executable
+ (public_name heuristic)
+ (name heuristic)
+ (libraries strategy lambdaTerm))

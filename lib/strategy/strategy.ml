@@ -6,7 +6,8 @@ open Graph
 let ( #~ ) = Fun.compose
 
 module type Strategy = sig
-  module Lt : LambdaTerm.LambdaTerm
+  module Lt : LambdaTerm.LambdaTerm with type t = LambdaTerm.LambdaTerm.t
+  module Graph : Graph
 
   val name : string
 
@@ -19,18 +20,22 @@ module type Strategy = sig
 end
 
 module type NoStrategy = sig
-  module Lt : LambdaTerm.LambdaTerm
   module S : Strategy
+  module Lt : LambdaTerm.LambdaTerm
+  module Queue : Heap.Heap with type Elem.t = int * Lt.t
+  module LHashtbl : Hashtbl.S with type key = Lt.t
+  module Graph : Graph with type Elem.t = Lt.t
 
   val is_normal : Lt.t -> bool
   val reduce_step : Lt.t -> Lt.t list
-  val reduce_graph : string -> (int list, int) Hashtbl.t * Graph.t
-  val astar : bool -> string -> (int list, int * int * int list) Hashtbl.t * Graph.t * Lt.t list * int
+  val reduce_graph : string -> int LHashtbl.t * Graph.t
+  val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
   val idastar : string -> Lt.t list * int
+  val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 
 module type PartialStrategy = sig
-  module Lt : LambdaTerm.LambdaTerm
+  module Lt : LambdaTerm.LambdaTerm with type t = LambdaTerm.LambdaTerm.t
 
   val name : string
 
@@ -40,6 +45,10 @@ end
 
 module FStrategy (Ps : PartialStrategy) : Strategy = struct
   module Lt = Ps.Lt
+  module Graph = Graph(struct
+    type t = Lt.t
+    let eq = Lt.alpha_eq
+    let to_string = Lt.to_string end)
 
   let name = Ps.name
   let is_normal = Ps.is_normal
@@ -69,30 +78,31 @@ module FStrategy (Ps : PartialStrategy) : Strategy = struct
     in
     aux [] term
 
-  let reduce_graph s =
-    let term = Lt.of_string s in
-    let term_db = Lt.deBruijn_index term in
-    let graph = ref Graph.empty in
-    let (node_map : (int list, int) Hashtbl.t) = Hashtbl.create 10 in
-    let () = Hashtbl.add node_map term_db 0;
-             graph := Graph.add_node !graph |> fst in
-    let node_id = ref 1 in
-    let rec aux t =
-      let t_db = Lt.deBruijn_index t in
-      let next_t = Ps.reduce_step t in
-      let next_t_db = Lt.deBruijn_index next_t in
-      if Hashtbl.mem node_map next_t_db then 
-        (Graph.add_edge (Hashtbl.find node_map t_db) (Hashtbl.find node_map next_t_db) !graph; 
-        !graph)
-      else
-        let () = Hashtbl.add node_map next_t_db !node_id;
-                 graph := Graph.force_add_edge (Hashtbl.find node_map t_db) !node_id !graph;
-                 node_id := !node_id + 1
-        in
-        aux next_t
-    in
-    let g = aux term in
-    node_map, g, !node_id - 1
+  let reduce_graph _ =
+    (* let term = Lt.of_string s in *)
+    (* let term_db = Lt.deBruijn_index term in *)
+    (* let graph = Graph.empty in *)
+    (* let (node_map : (int list, int) Hashtbl.t) = Hashtbl.create 10 in *)
+    (* let () = Hashtbl.add node_map term_db 0; *)
+    (*          Graph.add_node graph in *)
+    (* let node_id = ref 1 in *)
+    (* let rec aux t = *)
+    (*   let t_db = Lt.deBruijn_index t in *)
+    (*   let next_t = Ps.reduce_step t in *)
+    (*   let next_t_db = Lt.deBruijn_index next_t in *)
+    (*   if Hashtbl.mem node_map next_t_db then  *)
+    (*     (Graph.add_edge (Hashtbl.find node_map t_db) (Hashtbl.find node_map next_t_db) graph;  *)
+    (*     graph) *)
+    (*   else *)
+    (*     let () = Hashtbl.add node_map next_t_db !node_id; *)
+    (*              Graph.force_add_edge (Hashtbl.find node_map t_db) !node_id graph; *)
+    (*              node_id := !node_id + 1 *)
+    (*     in *)
+    (*     aux next_t *)
+    (* in *)
+    (* let g = aux term in *)
+    (* node_map, g, !node_id - 1 *)
+    failwith "Tests ongoing"
 end
 
 module PartialLeftInnermostStrategy : PartialStrategy = struct
@@ -217,6 +227,19 @@ module WeakLeftOutermostStrategy : Strategy = FStrategy(PartialWeakLeftOutermost
 module FNoStrategy (S : Strategy) :NoStrategy = struct
   module Lt = S.Lt
   module S = S
+  module Queue = Heap.Queue (struct 
+    type t = int * Lt.t
+    let eq (_, t1) (_, t2) = Lt.alpha_eq t1 t2
+    let lt (i, _) (j, _) = i < j
+    let to_string (i, t) = "(" ^ string_of_int i ^ ", " ^ (Lt.to_string t) ^ ")" end)
+  module LHashtbl = Hashtbl.Make(struct
+    type t = Lt.t
+    let equal = Lt.alpha_eq
+    let hash = Fun.compose Hashtbl.hash Lt.to_deBruijn end)
+  module Graph = Graph(struct
+    type t = Lt.t
+    let eq = Lt.alpha_eq
+    let to_string = Lt.to_string end)
 
   let rec is_normal = function
       Lt.Var _ -> true
@@ -235,97 +258,101 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       (List.map (fun t -> Lt.App (t1, t)) (reduce_step t2))
 
 
-  let reduce_graph s =
-    let term = Lt.of_deBruijn (Lt.deBruijn_index (Lt.of_string s)) in
+  let reduce_graph _ =
+    failwith "Tests ongoing"
 
-    (* Structures initialisation *)
-    let graph = ref Graph.empty in
-    let (node_map : (int list, int) Hashtbl.t) = Hashtbl.create (List.length (Lt.deBruijn_index term)) in
-    let () = Hashtbl.add node_map (Lt.deBruijn_index term) 0;
-             graph := Graph.add_node !graph |> fst in
-    let node_id = ref 1 in
-    let found_normal_form = ref false in
-
-    (* Calculation of max term *)
-    let normal_term = S.reduce_safer (S.Lt.of_string s) in
-    let normal_term_db = S.Lt.deBruijn_index (normal_term) in
-    let () = print_endline (Lt.deBruijn_to_string normal_term_db) in
-
-    (* Graph construction *)
-    let one_step t =
-      if is_normal t then []
-      else if !found_normal_form then 
-        let t_db = Lt.deBruijn_index t in 
-        let node_t = Hashtbl.find node_map t_db in 
-        let next_ts = reduce_step t in
-        List.iter (fun next_t ->
-          let next_t_db = Lt.deBruijn_index next_t in
-          if Hashtbl.mem node_map next_t_db then
-            Graph.add_edge node_t (Hashtbl.find node_map next_t_db) !graph
-          else
-            (graph := Graph.force_add_edge node_t !node_id !graph;
-            Hashtbl.add node_map next_t_db !node_id;
-            node_id := !node_id + 1)) next_ts; []
-      else
-        let t_db = Lt.deBruijn_index t in
-        let node_t = Hashtbl.find node_map t_db in
-        let next_ts = reduce_step t in
-        List.fold_left (fun acc next_t ->
-          let next_t_db = Lt.deBruijn_index next_t in
-          (if List.equal (Int.equal) next_t_db normal_term_db then found_normal_form := true);
-          if Hashtbl.mem node_map next_t_db then
-            (Graph.add_edge node_t (Hashtbl.find node_map next_t_db) !graph;
-            acc)
-          else
-            (graph := Graph.force_add_edge node_t !node_id !graph;
-            Hashtbl.add node_map next_t_db !node_id;
-            node_id := !node_id + 1;
-            next_t :: acc)
-        ) [] next_ts
-    in
-
-    let rec aux t_list =
-      match t_list with
-      | [] -> ()
-      | _ ->
-        let new_terms = List.fold_left (fun acc t -> one_step t @ acc) [] t_list in
-        let new_terms = List.sort Lt.compare_length new_terms in
-        aux new_terms
-    in
-    aux [term]; node_map, !graph
+    (* let term = Lt.of_deBruijn (Lt.deBruijn_index (Lt.of_string s)) in *)
+    (**)
+    (* (* Structures initialisation *) *)
+    (* let graph = ref Graph.empty in *)
+    (* let (node_map : (int list, int) Hashtbl.t) = Hashtbl.create (List.length (Lt.deBruijn_index term)) in *)
+    (* let () = Hashtbl.add node_map (Lt.deBruijn_index term) 0; *)
+    (*          graph := Graph.add_node !graph |> fst in *)
+    (* let node_id = ref 1 in *)
+    (* let found_normal_form = ref false in *)
+    (**)
+    (* (* Calculation of max term *) *)
+    (* let normal_term = S.reduce_safer (S.Lt.of_string s) in *)
+    (* let normal_term_db = S.Lt.deBruijn_index (normal_term) in *)
+    (* let () = print_endline (Lt.deBruijn_to_string normal_term_db) in *)
+    (**)
+    (* (* Graph construction *) *)
+    (* let one_step t = *)
+    (*   if is_normal t then [] *)
+    (*   else if !found_normal_form then  *)
+    (*     let t_db = Lt.deBruijn_index t in  *)
+    (*     let node_t = Hashtbl.find node_map t_db in  *)
+    (*     let next_ts = reduce_step t in *)
+    (*     List.iter (fun next_t -> *)
+    (*       let next_t_db = Lt.deBruijn_index next_t in *)
+    (*       if Hashtbl.mem node_map next_t_db then *)
+    (*         Graph.add_edge node_t (Hashtbl.find node_map next_t_db) !graph *)
+    (*       else *)
+    (*         (graph := Graph.force_add_edge node_t !node_id !graph; *)
+    (*         Hashtbl.add node_map next_t_db !node_id; *)
+    (*         node_id := !node_id + 1)) next_ts; [] *)
+    (*   else *)
+    (*     let t_db = Lt.deBruijn_index t in *)
+    (*     let node_t = Hashtbl.find node_map t_db in *)
+    (*     let next_ts = reduce_step t in *)
+    (*     List.fold_left (fun acc next_t -> *)
+    (*       let next_t_db = Lt.deBruijn_index next_t in *)
+    (*       (if List.equal (Int.equal) next_t_db normal_term_db then found_normal_form := true); *)
+    (*       if Hashtbl.mem node_map next_t_db then *)
+    (*         (Graph.add_edge node_t (Hashtbl.find node_map next_t_db) !graph; *)
+    (*         acc) *)
+    (*       else *)
+    (*         (graph := Graph.force_add_edge node_t !node_id !graph; *)
+    (*         Hashtbl.add node_map next_t_db !node_id; *)
+    (*         node_id := !node_id + 1; *)
+    (*         next_t :: acc) *)
+    (*     ) [] next_ts *)
+    (* in *)
+    (**)
+    (* let rec aux t_list = *)
+    (*   match t_list with *)
+    (*   | [] -> () *)
+    (*   | _ -> *)
+    (*     let new_terms = List.fold_left (fun acc t -> one_step t @ acc) [] t_list in *)
+    (*     let new_terms = List.sort Lt.compare_length new_terms in *)
+    (*     aux new_terms *)
+    (* in *)
+    (* aux [term]; node_map, !graph *)
 
 
   (* Heuristiques *)
   (* Non admissible : Lx.x *)
-  let [@warning "-32"] h_trivial = List.length
+  let [@warning "-32"] h_trivial = Lt.length
 
   (* Non admissible : (Lx.f)((Lx.x)(Lx.x)) *)
-  let rec redex_count : Lt.t -> int = function
+  let [@warning "-32"] rec h_redex_count : Lt.t -> int = function
     | Var _ -> 0
-    | Fun (_, body) -> redex_count body
-    | App (Fun (_, body), t2) -> 1 + redex_count body + redex_count t2
-    | App (t1, t2) -> redex_count t1 + redex_count t2
-  let [@warning "-32"] h_redex_count = redex_count #~ Lt.of_deBruijn
+    | Fun (_, body) -> h_redex_count body
+    | App (Fun (_, body), t2) -> 1 + h_redex_count body + h_redex_count t2
+    | App (t1, t2) -> h_redex_count t1 + h_redex_count t2
 
   (* Non admissible ? (Preuve à faire) *)
-  let rec redex_left_count : Lt.t -> int = function
+  let [@warning "-32"] rec h_redex_left_count : Lt.t -> int = function
     | Var _ -> 0
-    | Fun (_, body) -> redex_left_count body
-    | App (Fun (_, body), _) -> 1 + redex_left_count body
-    | App (t1, _) -> redex_left_count t1
-  let [@warning "-32"] h_redex_left_count = redex_left_count #~ Lt.of_deBruijn
+    | Fun (_, body) -> h_redex_left_count body
+    | App (Fun (_, body), _) -> 1 + h_redex_left_count body
+    | App (t1, _) -> h_redex_left_count t1
 
   (* Non admissible *)
-  let rec greedy_parallel : Lt.t -> int = function
+  let [@warning "-32"] rec h_greedy_parallel : Lt.t -> int = function
     | Var _ -> 0
-    | Fun (_, body) -> greedy_parallel body
+    | Fun (_, body) -> h_greedy_parallel body
     | App (Fun _, _) -> 1
-    | App (t1, t2) -> greedy_parallel t1 + greedy_parallel t2
-  let [@warning "-32"] h_greedy_parallel = greedy_parallel #~ Lt.of_deBruijn
+    | App (t1, t2) -> h_greedy_parallel t1 + h_greedy_parallel t2
 
   (* Non admissible : factoriel 1 *)
-  let [@warning "-32"] h_leftoutermost = LeftOutermostStrategy.distance #~ LeftOutermostStrategy.Lt.of_deBruijn
+  let [@warning "-32"] h_leftoutermost = LeftOutermostStrategy.distance
 
+  let file = open_in_bin "heuristic_data"
+  let heuristic_hashtbl : int LHashtbl.t = Marshal.from_channel file
+  let () = close_in file
+
+  module Lbt = LambdaTerm.LambdaBottomTerm
   
   let rec sel i =
     if i = 1 then sel_1
@@ -337,14 +364,17 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
 
   and sel_2 : Lt.t -> int option = function
     | Var _ -> Some 0
-    | Fun (x, body) -> if List.mem x (Lt.free_vars @@ brack 2 body) then Some 1 else None
+    | Fun (x, body) -> if List.mem x (Lbt.free_vars @@ brack 2 body) then Some 1 else None
     | App _ -> None
 
   and sel_3 : Lt.t -> int option = function
     | Var _ -> Some 0
-    | Fun (x, body) -> if List.mem x (Lt.free_vars @@ brack 3 body) then Some 1
-                       else (match sel_3 body with | None -> None | Some x when x > 0 -> Some (x + 1) | _ -> Some 0)
-    | App (t1, _) -> (match sel_3 t1 with | Some x when x <> 1 -> Some (x - 1) | _ -> None)
+    | Fun (x, body) -> if List.mem x (Lbt.free_vars @@ brack 3 body) then Some 1
+                       else (match sel_3 body with | Some x when x > 0 -> Some (x + 1) | _ -> Some 0)
+    | App (t1, _) -> (match sel_3 t1 with 
+      | Some 0 -> Some 0
+      | Some x when x > 1 -> Some (x - 1) 
+      | _ -> None)
 
   (* Not sure I understood what is lengthtail *)
   (* and sel_4 : Lt.t -> int option = function *)
@@ -363,129 +393,123 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
   (**)
   (* and lengthtail = () *)
 
-  and brack i = function
+  and brack i : Lt.t -> Lbt.t = function
     | Var x -> Var x
     | Fun (x, body) -> Fun (x, brack i body)
     | App (t1, t2) -> 
       match sel i t2 with 
       | Some 1 -> App (brack i t1, brack i t2) 
-      | _ -> App (brack i t1, )
+      | _ -> App (brack i t1, Bottom)
 
-  let [@warning "-32"] h_spine_redex i t_db =
-    let t = Lt.of_deBruijn t_db in
-    let () = print_endline ("Term before transform: " ^ Lt.to_string t) in
-    let redexs = List.map Lt.deBruijn_index (Lt.redex_list t) in
-    let () = print_endline ("Redexs before transform: " ^ String.concat ", " (List.map Lt.deBruijn_to_string redexs)) in
-    let redexs_after_transform = List.map Lt.deBruijn_index (Lt.redex_list (brack i t)) in
-    let () = print_endline ( "Term after transform: " ^ Lt.to_string (brack i t)) in
-    let () = print_endline ("Redexs after transform: " ^ String.concat ", " (List.map Lt.deBruijn_to_string redexs_after_transform)) in
-    let redexs_residual = List.filter (fun t -> List.mem t redexs_after_transform) redexs in
-    List.length redexs_residual
+  let [@warning "-32"] h_spine_redex i t =
+    let redex_list = Lt.redex_list t in
+    let redex_list' = Lbt.redex_list (brack i t) in
+    List.fold_left (fun acc r ->
+      if List.exists (LambdaTerm.alpha_compare r) redex_list' then acc + 1 else acc
+    ) 0 redex_list
 
-  let astar construct_graph s =
-    let h = h_spine_redex 3 in
-    let term_db = Lt.deBruijn_index (Lt.of_string s) in
-    let term = Lt.of_deBruijn term_db in
-    let module Queue = Heap.Queue in
+  let [@warning "-32"] h_preload t =
+    try LHashtbl.find heuristic_hashtbl t
+    with Not_found -> h_spine_redex 3 t
+
+  let astar construct_graph term =
+    let h : Lt.t -> int = h_spine_redex 3 in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
-    let () = if construct_graph then graph := Graph.add_node !graph |> fst in
-    let (node_map : (int list, int * int * int list) Hashtbl.t) = Hashtbl.create (List.length (Lt.deBruijn_index term)) in
-    let () = Hashtbl.add node_map (Lt.deBruijn_index term) (0, 0, []) in
-    let q = Queue.insert term_db 0 Queue.empty in
+    let () = if construct_graph then Graph.add_node !graph in
+    (*Hashtbl represent : 
+      -key : term,
+      -value : node_id, distance of astar algorithm, predecessor*)
+    let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 100 in
+    let () = LHashtbl.add node_map term (0, 0, Var "-1") in
+    let q = Queue.insert (0, term) Queue.empty in
     let node_id = ref 1 in
     let found_normal_form = ref false in
 
     (* Calculation of normal term *)
-    let normal_term = S.reduce_safer (S.Lt.of_string s) in
-    let normal_term_db = S.Lt.deBruijn_index (normal_term) in
-    let () = print_endline (Lt.deBruijn_to_string normal_term_db) in
+    let normal_term = S.reduce_safer term in
+    let () = print_endline (Lt.to_string normal_term) in
 
     let one_step t q =
       if is_normal t then q
+      else if !found_normal_form then Queue.empty
       else 
-      let t_db = Lt.deBruijn_index t in
-      let node_t, d_t, _ = Hashtbl.find node_map t_db in
+      let node_t, d_t, _ = LHashtbl.find node_map t in
       let next_ts = reduce_step t in
-      if !found_normal_form then Queue.empty
-      else
-        (List.fold_left (fun q next_t ->
-          let next_t_db = Lt.deBruijn_index next_t in
-          (if List.equal (Int.equal) next_t_db normal_term_db then found_normal_form := true);
-          if Hashtbl.mem node_map next_t_db then
-            (let node_next_t, d_next_t, _ = Hashtbl.find node_map next_t_db in
-            (if construct_graph then Graph.add_edge node_t node_next_t !graph);
-            if d_t <= d_next_t then
-              (Hashtbl.replace node_map next_t_db (node_next_t, d_t + 1, t_db);
-              print_endline (string_of_int @@ h next_t_db);
-              Queue.change_or_insert next_t_db (d_t + 1 + (h next_t_db)) q)
-            else
-              q)
+      (List.fold_left (fun q next_t ->
+        (if Lt.alpha_eq next_t normal_term then found_normal_form := true);
+        if LHashtbl.mem node_map next_t then
+          (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
+          (if construct_graph then Graph.add_edge node_t node_next_t !graph);
+          if d_t <= d_next_t then
+            (LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t);
+            Queue.prio_insert (0, next_t) (d_t + 1 + (h next_t), next_t) q)
           else
-            (if construct_graph then (graph := Graph.force_add_edge node_t !node_id !graph);
-            Hashtbl.add node_map next_t_db (!node_id, d_t+1, t_db);
-            (if construct_graph then node_id := !node_id + 1);
-            print_endline (string_of_int @@ h next_t_db);
-            Queue.insert next_t_db (d_t + 1 + (h next_t_db)) q)
-        ) q next_ts)
+            q)
+        else
+          (if construct_graph then Graph.force_add_edge node_t !node_id !graph;
+          LHashtbl.add node_map next_t (!node_id, d_t+1, t);
+          (if construct_graph then node_id := !node_id + 1);
+          Queue.insert (d_t + 1 + (h next_t), next_t) q)
+      ) q next_ts)
     in
 
     let rec aux q =
       if Queue.is_empty q then ()
       else
-        let t_db, q = Queue.extract_min q in
-        aux (one_step (Lt.of_deBruijn t_db) q)
+        let (_, t), q = Queue.extract q in
+        aux (one_step t q)
     in
     let () = aux q in
-    let (_, s, n) = Hashtbl.find node_map normal_term_db in
+    let (_, s, n) = LHashtbl.find node_map normal_term in
     let rec path = function
-      | [] -> []
+      | Lt.Var "-1" -> []
       | father -> 
-        let (_,_,f) = Hashtbl.find node_map father in
-        if List.equal (=) father f then []
-        else Lt.of_deBruijn father :: path f
+        let (_,_,f) = LHashtbl.find node_map father in
+        if Lt.alpha_eq father f then []
+        else father :: path f
     in
-    node_map, !graph, (List.rev (Lt.of_deBruijn normal_term_db :: path n)), s
+    node_map, !graph, (List.rev (normal_term :: path n)), s
 
-
-  let idastar s =
-    let h = h_redex_count in
-    let term_db = Lt.deBruijn_index (Lt.of_string s) in
-    let found = ref false in
-    
-    let normal_term = S.reduce_safer (S.Lt.of_string s) in
-    let normal_term_db = S.Lt.deBruijn_index (normal_term) in
-
-    let rec dfs path bound : int list list * int =
-      let current_cost = List.length path - 1 in
-      let current_term_db = List.hd path in
-      let cost = current_cost + h current_term_db in
-      if cost > bound then (List.rev path, cost)
-      else if List.equal ( = ) current_term_db normal_term_db then (found := true; (List.rev path, cost))
-      else
-        let min_bound = ref max_int in
-        let min_path = ref [] in
-        let next_terms = reduce_step (Lt.of_deBruijn current_term_db) in
-        let alr_found = ref false in
-        List.iter (fun next_t ->
-          let next_t_db = Lt.deBruijn_index next_t in
-          if not (List.mem next_t_db path) then
-            let (t_path, t_bound) = dfs (next_t_db :: path) bound in
-            if !found && not !alr_found then (alr_found := true; min_bound := t_bound; min_path := t_path)
-            else if !found then ()
-            else if t_bound < !min_bound then (min_bound := t_bound; min_path := t_path)
-        ) next_terms;
-        (!min_path, !min_bound)
-    in
-
-    let rec loop bound =
-      let t_path, t_bound = dfs [term_db] bound in
-      if !found then t_path, bound
-      else if t_bound = max_int then [], max_int
-      else loop t_bound
-    in
-    let (path, length) = loop (h term_db) in ((List.map (Lt.of_deBruijn) path), length)
+  let idastar _ =
+    failwith "Tests ongoing"
+    (* let h = h_redex_count in *)
+    (* let term_db = Lt.deBruijn_index (Lt.of_string s) in *)
+    (* let found = ref false in *)
+    (**)
+    (* let normal_term = S.reduce_safer (S.Lt.of_string s) in *)
+    (* let normal_term_db = S.Lt.deBruijn_index (normal_term) in *)
+    (* *)
+    (* let rec dfs path bound : int list list * int = *)
+    (*   let current_cost = List.length path - 1 in *)
+    (*   let current_term_db = List.hd path in *)
+    (*   let cost = current_cost + h current_term_db in *)
+    (*   if cost > bound then (List.rev path, cost) *)
+    (*   else if List.equal ( = ) current_term_db normal_term_db then (found := true; (List.rev path, cost)) *)
+    (*   else *)
+    (*     let min_bound = ref max_int in *)
+    (*     let min_path = ref [] in *)
+    (*     let next_terms = reduce_step (Lt.of_deBruijn current_term_db) in *)
+    (*     let alr_found = ref false in *)
+    (*     List.iter (fun next_t -> *)
+    (*       let next_t_db = Lt.deBruijn_index next_t in *)
+    (*       if not (List.mem next_t_db path) then *)
+    (*         let (t_path, t_bound) = dfs (next_t_db :: path) bound in *)
+    (*         if !found && not !alr_found then (alr_found := true; min_bound := t_bound; min_path := t_path) *)
+    (*         else if !found then () *)
+    (*         else if t_bound < !min_bound then (min_bound := t_bound; min_path := t_path) *)
+    (*     ) next_terms; *)
+    (*     (!min_path, !min_bound) *)
+    (* in *)
+    (* *)
+    (* let rec loop bound = *)
+    (*   let t_path, t_bound = dfs [term_db] bound in *)
+    (*   if !found then t_path, bound *)
+    (*   else if t_bound = max_int then [], max_int *)
+    (*   else loop t_bound *)
+    (* in *)
+    (* let (path, length) = loop (h term_db) in ((List.map (Lt.of_deBruijn) path), length) *)
 end
 
 module LONoStrategy = FNoStrategy(LeftOutermostStrategy)

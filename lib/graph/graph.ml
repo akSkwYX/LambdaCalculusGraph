@@ -1,4 +1,14 @@
+module type Element = sig
+  type t
+
+  val eq : t -> t -> bool
+
+  val to_string : t -> string
+end
+
 module type Graph = sig
+  module Elem : Element
+
   type t
 
   val empty : t
@@ -6,66 +16,42 @@ module type Graph = sig
 
   val order : t -> int
   val size : t -> int
-  val add_node : t -> t * int 
-  val add_edge : int -> int -> t -> unit 
-  val force_add_edge : int -> int -> t -> t
-  val get_neighbors : int -> t -> int list
-  val init_from_edges : (int * int) list -> t
-  val to_string : t -> string
-  val to_pdf : t -> (int, int list) Hashtbl.t -> int list list -> string -> unit
+
+  val add_node : t -> unit
+  val add_edge : int -> int -> t -> unit
+  val force_add_edge : int -> int -> t -> unit
+
+  val to_pdf : t -> (int, Elem.t) Hashtbl.t -> Elem.t list -> string -> unit
 end
 
-module Graph : Graph = struct
-  type t = int list array
+module Graph (Elem : Element) : Graph with module Elem = Elem = struct
+  module Elem = Elem
 
-  let empty = [||]
-  let is_empty g = Array.length g = 0
+  (* order, size, graph *)
+  type t = int ref * int ref * int list array ref
 
-  let order g = Array.length g
-  let size g = Array.fold_left (fun acc neighbors -> acc + List.length neighbors) 0 g
+  let empty = (ref 0, ref 0, ref [||])
+  let is_empty (o, _, _) = !o = 0
 
-  let add_node g = Array.append g [| [] |], Array.length g
+  let order (o, _, _) = !o
+  let size (_, s, _) = !s
 
-  let add_edge v1 v2 g =
-    let len = Array.length g in
-    if v1 < 0 || v1 >= len || v2 < 0 || v2 >= len then
+  let add_node (o, _, g) = 
+    o := !o + 1; g := Array.append !g [| [] |]
+
+  let add_edge u v (o, s, g) =
+    if u < 0 || u >= !o || v < 0 || v >= !o then
       raise (Invalid_argument "Node index out of bounds")
     else
-      (* Remove this case if want to see each possible derivations *)
-      if List.mem v2 g.(v1) then
-        ()
-      else
-        g.(v1) <- v2 :: g.(v1)
+      if List.mem v !g.(u) then ()
+      else (!g.(u) <- v :: !g.(u); s := !s + 1)
 
-  let force_add_edge v1 v2 g =
-    let len = Array.length g in
-    let g' = if v1 >= len || v2 >= len then
-               let new_size = max (v1 + 1) (v2 + 1) in
-               Array.init new_size (fun i -> if i < len then g.(i) else [])
-             else g
-    in
-    add_edge v1 v2 g';
-    g'
+  let force_add_edge u v (o, s, g) =
+    if u >= !o || v >= !o then
+      (g := Array.init (max u v + 1) (fun i -> if i < !o then !g.(i) else []); o := max u v + 1);
+    add_edge u v (o, s, g)
 
-  let get_neighbors v g =
-    if v < 0 || v >= Array.length g then
-      raise (Invalid_argument "Node index out of bounds")
-    else
-      g.(v)
 
-  let init_from_edges edges =
-    let max_node = List.fold_left (fun acc (v1, v2) -> max acc (max v1 v2)) (-1) edges in
-    let g = Array.make (max_node + 1) [] in
-    List.iter (fun (v1, v2) -> add_edge v1 v2 g |> ignore) edges;
-    g
-
-  let to_string g =
-    Array.fold_left (fun (acc, i) neighbors ->
-       acc ^ (string_of_int i) ^ " : " ^
-       (String.concat "; " (List.map string_of_int neighbors) ^ "\n"), i+1
-    ) ("", 0) g |> fst
-
-  (* To pdf : *)
   let escape_label s =
     let b = Buffer.create (String.length s + 8) in
     String.iter (fun c ->
@@ -100,9 +86,9 @@ module Graph : Graph = struct
     done;
     groups
 
-  let to_pdf (g : int list array) (hst : (int, int list) Hashtbl.t) (path : int list list) (filename : string) : unit =
+  let to_pdf ((_, _, g) : t) (hst : (int, Elem.t) Hashtbl.t) (path : Elem.t list) (filename : string) : unit =
     let format_node n =
-      try LambdaTerm.LambdaTerm.to_string @@ LambdaTerm.LambdaTerm.of_deBruijn (Hashtbl.find hst n)
+      try Elem.to_string (Hashtbl.find hst n)
       with Not_found -> string_of_int n
     in
     let dot_path = "results/" ^ filename ^ ".dot" in
@@ -116,7 +102,7 @@ module Graph : Graph = struct
     Array.iteri (fun i _ ->
       let label = escape_label (format_node i) in
       Printf.fprintf oc "  n%d [label=\"%s\"];\n" i label
-    ) g;
+    ) !g;
     Printf.fprintf oc "\n";
 
     Array.iteri (fun i nbrs ->
@@ -124,10 +110,10 @@ module Graph : Graph = struct
       List.iter (fun j -> 
         if List.mem i_node path && List.mem (Hashtbl.find hst j) path then Printf.fprintf oc "  n%d -> n%d [color=red style=\"bold\"];\n" i j
         else Printf.fprintf oc "  n%d -> n%d;\n" i j) nbrs
-    ) g;
+    ) !g;
     Printf.fprintf oc "\n";
 
-    let layers = compute_layers g in
+    let layers = compute_layers !g in
     Array.iter (fun nodes ->
       match nodes with
       | [] -> ()

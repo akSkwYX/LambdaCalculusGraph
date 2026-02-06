@@ -26,30 +26,34 @@ end
 
 module Reduction_graph_viewer (Term : Value) (Strategy : Strategy.NoStrategy) = struct
   let exec () = 
-    let hst, g = Strategy.reduce_graph Term.v in
-    let reverse_hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
+    (* let module Hashtbl = Strategy.Hashtbl in *)
+    (* let hst, g = Strategy.reduce_graph Term.v in *)
+    (* let reverse_hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in *)
     (* let file = open_out "results/node_map.txt" in *)
     (* let () = Hashtbl.iter (fun k v ->  *)
     (*   output_string file (string_of_int v ^ " : " ^ (Strategy.Lt.to_string (Strategy.Lt.of_deBruijn k)) ^ "\n")) hst in *)
     (* let () = close_out file in *)
-    Graph.Graph.to_pdf g reverse_hst [] "reduction_graph"; ()
+    (* Graph.Graph.to_pdf g reverse_hst [] "reduction_graph"; () *)
     (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
+    failwith "Tests ongoing"
 end
 
 (* ---------- A* ---------- *)
 
 module Astar (Term : Value) (Strategy : Strategy.NoStrategy) (Construct_graph : Value) = struct
   let exec () =
-    let hst, g, terms, steps = Strategy.astar (bool_of_string Construct_graph.v) Term.v in
+    let module SHashtbl = Strategy.LHashtbl in
+    let module Graph = Strategy.Graph in
+    let hst, g, terms, steps = Strategy.astar (bool_of_string Construct_graph.v) (Strategy.Lt.of_string Term.v) in
     let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
-    let () = print_endline ("Order of graph : " ^ (string_of_int (Graph.Graph.order g))) in
-    let () = print_endline ("Size of graph : " ^ (string_of_int (Graph.Graph.size g))) in
+    let () = print_endline ("Order of graph : " ^ (string_of_int (Graph.order g))) in
+    let () = print_endline ("Size of graph : " ^ (string_of_int (Graph.size g))) in
     let () = print_endline "Path :" in
     let () = List.iter (print_endline #~ Strategy.Lt.to_string) terms in
     if bool_of_string Construct_graph.v then
       begin
-      let reverse_hst = Hashtbl.fold (fun k (v, _, _) acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
-      Graph.Graph.to_pdf g reverse_hst (List.map Strategy.Lt.deBruijn_index terms) "astar_graph"
+      let reverse_hst = SHashtbl.fold (fun k (v, _, _) acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (SHashtbl.length hst)) in
+      Graph.to_pdf g reverse_hst terms "astar_graph"
       end
 end
 
@@ -84,11 +88,13 @@ let extend_lambda_term lambda =
 
 module Reduction_with_chosen_strategy (Term : Value) (Strategy : Strategy.Strategy) = struct
   let exec () =
-    let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in
-    let hst, g, steps = Strategy.reduce_graph Term.v in
-    Graph.Graph.to_pdf g (reverse_hst hst) [] ("reduction_graph_" ^ Strategy.name);
-    print_endline ("Number of steps to normal form : " ^ (string_of_int steps))
+    (* let module Graph = Strategy.Graph in *)
+    (* let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in *)
+    (* let hst, g, steps = Strategy.reduce_graph Term.v in *)
+    (* Graph.to_pdf g (reverse_hst hst) [] ("reduction_graph_" ^ Strategy.name); *)
+    (* print_endline ("Number of steps to normal form : " ^ (string_of_int steps)) *)
     (* let _ = Sys.command "xdg-open results/reduction_graph_WLis.pdf &" in () *)
+    failwith "Tests ongoing"
 end
 
 (* ---------- Launch ---------- *)

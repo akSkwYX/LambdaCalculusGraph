@@ -3,7 +3,7 @@ module type Token = sig
     Var of string | Lambda | LParen | RParen | Dot 
     | Coma | N of int
     | Number of int | Succ | Plus | Time | True | False | LAngle | RAngle
-    | P1 | P2 | P | IsZero | Y | I
+    | P1 | P2 | P | IsZero | Y | I | Bottom
   and t = {lexeme : lexeme; index : int}
 
   val index : t -> int
@@ -23,7 +23,7 @@ module Token = struct
     Var of string | Lambda | LParen | RParen | Dot 
     | Coma | N of int
     | Number of int | Succ | Plus | Time | True | False | LAngle | RAngle
-    | P1 | P2 | P | IsZero | Y | I
+    | P1 | P2 | P | IsZero | Y | I | Bottom
   and t = {lexeme : lexeme; index : int}
 
   exception Lexing_error of string
@@ -37,6 +37,7 @@ module Token = struct
   let to_string = function
     | { lexeme = Var v; index = _ } -> v
     | { lexeme = Lambda; index = _ } -> "λ"
+    | { lexeme = Bottom; index = _ } -> "⊥"
     | { lexeme = LParen; index = _ } -> "("
     | { lexeme = RParen; index = _ } -> ")"
     | { lexeme = Dot; index = _ } -> "."
@@ -79,6 +80,7 @@ module Token = struct
     | { lexeme = IsZero; index = _ } -> "{ lexeme = IsZero; index = Token.index t}"
     | { lexeme = Y; index = _ } -> "{ lexeme = Y; index = Token.index t}"
     | { lexeme = I; index = _ } -> "{ lexeme = I; index = Token.index t }"
+    | { lexeme = Bottom; index = _ } -> "{ lexeme = Bottom; index = Token.index t }"
 
   let rec find_n s len acc pos =
     if pos < len then
@@ -92,6 +94,19 @@ module Token = struct
 
   let list_of_string s =
     let len = String.length s in
+    let lex_var s current =
+      let rec aux acc pos =
+        if pos < len then
+          let c = s.[pos] in
+          if Char.code c >= Char.code '0' && Char.code c <= Char.code '9' then
+            aux (acc ^ (String.make 1 c)) (pos + 1)
+          else
+            (acc, pos)
+        else
+          (acc, pos)
+      in
+      aux (String.make 1 s.[ current ]) (current + 1)
+    in
     let rec lex_lambda k current =
       if current >= len then k [] else
       match s.[ current ] with
@@ -122,6 +137,7 @@ module Token = struct
         | "IsZero" -> IsZero
         | "Y" -> Y
         | "I" -> I
+        | "B" -> Bottom
         | _ ->
           let n = try int_of_string inner with
             | Failure _ -> raise (Lexing_error ("Invalid token in brackets at position " ^ string_of_int current))
@@ -133,7 +149,8 @@ module Token = struct
         let (n, next_pos) = find_n s len (Char.code c - 48) (current + 1) in
         lex_lambda (fun x -> k ({ lexeme = N n; index = current } :: x)) next_pos
       | c when Char.code c >= Char.code 'a' && Char.code c <= Char.code 'z' ->
-        lex_lambda (fun x -> k ({ lexeme = Var (String.make 1 c); index = current } :: x)) (current + 1)
+          let (var, current') = lex_var s current in
+          lex_lambda (fun x -> k ({ lexeme = Var var; index = current } :: x)) current'
       | c -> raise (Lexing_error ("[ " ^ (string_of_int current) ^ " ] Unexpected character : " ^ (String.make 1 c)))
     in
     try lex_lambda Fun.id 0 with
