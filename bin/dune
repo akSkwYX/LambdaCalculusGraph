@@ -1,7 +1,8 @@
 (executable
  (public_name main)
  (name main)
- (libraries graph strategy lambdaTerm token))
+ (libraries graph strategy lambdaTerm token)
+ (flags (:standard -w -27)))
 
 (executable
  (public_name heuristic)

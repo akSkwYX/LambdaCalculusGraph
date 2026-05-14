@@ -5,6 +5,8 @@ open Graph
 
 let ( #~ ) = Fun.compose
 
+(* ----- Signatures ----- *)
+
 module type Strategy = sig
   module Lt : LambdaTerm.LambdaTerm with type t = LambdaTerm.LambdaTerm.t
   module Graph : Graph
@@ -30,7 +32,6 @@ module type NoStrategy = sig
   val reduce_step : Lt.t -> Lt.t list
   val reduce_graph : string -> int LHashtbl.t * Graph.t
   val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
-  val idastar : string -> Lt.t list * int
   val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 
@@ -42,6 +43,8 @@ module type PartialStrategy = sig
   val is_normal : Lt.t -> bool
   val reduce_step : Lt.t -> Lt.t
 end
+
+(* ----- Functors ----- *)
 
 module FStrategy (Ps : PartialStrategy) : Strategy = struct
   module Lt = Ps.Lt
@@ -136,6 +139,7 @@ module PartialLeftInnermostStrategy : PartialStrategy = struct
 end
 
 module LeftInnermostStrategy : Strategy = FStrategy(PartialLeftInnermostStrategy)
+let leftInnermostStrategy = (module LeftInnermostStrategy : Strategy)
 
 module PartialWeakLeftInnermostStrategy : PartialStrategy = struct
   module Lt = LambdaTerm.LambdaTerm
@@ -167,6 +171,7 @@ module PartialWeakLeftInnermostStrategy : PartialStrategy = struct
 end
 
 module WeakLeftInnermostStrategy : Strategy = FStrategy(PartialWeakLeftInnermostStrategy)
+let weakLeftInnermostStrategy = (module WeakLeftInnermostStrategy : Strategy)
 
 module PartialLeftOutermostStrategy : PartialStrategy = struct
   module Lt = LambdaTerm.LambdaTerm
@@ -195,6 +200,7 @@ module PartialLeftOutermostStrategy : PartialStrategy = struct
 end
 
 module LeftOutermostStrategy : Strategy = FStrategy(PartialLeftOutermostStrategy)
+let leftOutermostStrategy = (module LeftOutermostStrategy : Strategy)
 
 module PartialWeakLeftOutermostStrategy : PartialStrategy = struct
   module Lt = LambdaTerm.LambdaTerm
@@ -223,15 +229,11 @@ module PartialWeakLeftOutermostStrategy : PartialStrategy = struct
 end
 
 module WeakLeftOutermostStrategy : Strategy = FStrategy(PartialWeakLeftOutermostStrategy)
+let weakLeftOutermostStrategy = (module WeakLeftOutermostStrategy : Strategy)
 
 module FNoStrategy (S : Strategy) :NoStrategy = struct
   module Lt = S.Lt
   module S = S
-  module Queue = Heap.Queue (struct 
-    type t = int * Lt.t
-    let eq (_, t1) (_, t2) = Lt.alpha_eq t1 t2
-    let lt (i, _) (j, _) = i < j
-    let to_string (i, t) = "(" ^ string_of_int i ^ ", " ^ (Lt.to_string t) ^ ")" end)
   module LHashtbl = Hashtbl.Make(struct
     type t = Lt.t
     let equal = Lt.alpha_eq
@@ -412,8 +414,15 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     try LHashtbl.find heuristic_hashtbl t
     with Not_found -> h_spine_redex 3 t
 
+  module Queue = Heap.Queue (struct 
+    type t = int * Lt.t
+    let eq (_, t1) (_, t2) = Lt.alpha_eq t1 t2
+    let lt (i, _) (j, _) = i < j
+    let to_string (i, t) = "(" ^ string_of_int i ^ ", " ^ (Lt.to_string t) ^ ")"
+    let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
+
   let astar construct_graph term =
-    let h : Lt.t -> int = h_spine_redex 3 in
+    let h : Lt.t -> int = h_leftoutermost in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
@@ -421,48 +430,65 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     (*Hashtbl represent : 
       -key : term,
       -value : node_id, distance of astar algorithm, predecessor*)
-    let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 100 in
+    let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 10000 in
     let () = LHashtbl.add node_map term (0, 0, Var "-1") in
-    let q = Queue.insert (0, term) Queue.empty in
+    let q = Queue.empty in
+    let mutex_queue = Mutex.create () in
+    let () = Queue.insert (0, term) q in
     let node_id = ref 1 in
     let found_normal_form = ref false in
+
+    let limited = false in
+    let max_step = 10000 in
+    let step = ref 1 in
 
     (* Calculation of normal term *)
     let normal_term = S.reduce_safer term in
     let () = print_endline (Lt.to_string normal_term) in
 
-    let one_step t q =
-      if is_normal t then q
-      else if !found_normal_form then Queue.empty
-      else 
-      let node_t, d_t, _ = LHashtbl.find node_map t in
-      let next_ts = reduce_step t in
-      (List.fold_left (fun q next_t ->
-        (if Lt.alpha_eq next_t normal_term then found_normal_form := true);
-        if LHashtbl.mem node_map next_t then
-          (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
-          (if construct_graph then Graph.add_edge node_t node_next_t !graph);
-          if d_t <= d_next_t then
-            (LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t);
-            Queue.prio_insert (0, next_t) (d_t + 1 + (h next_t), next_t) q)
+    let one_step t =
+      if limited && !step >= max_step then ()
+      else if is_normal t then ()
+      else if !found_normal_form then ()
+      else begin 
+        let node_t, d_t, _ = LHashtbl.find node_map t in
+        let next_ts = reduce_step t in
+        List.iter (fun next_t ->
+          if Lt.alpha_eq next_t normal_term then found_normal_form := true;
+          Mutex.lock mutex_queue;
+          if LHashtbl.mem node_map next_t then
+            (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
+            (if construct_graph then Graph.add_edge node_t node_next_t !graph);
+            if d_t + 1 < d_next_t then
+              (LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t);
+              Queue.prio_insert (0, next_t) (d_t + 1 + (h next_t), next_t) q))
           else
-            q)
-        else
-          (if construct_graph then Graph.force_add_edge node_t !node_id !graph;
-          LHashtbl.add node_map next_t (!node_id, d_t+1, t);
-          (if construct_graph then node_id := !node_id + 1);
-          Queue.insert (d_t + 1 + (h next_t), next_t) q)
-      ) q next_ts)
+            (if construct_graph then Graph.force_add_edge node_t !node_id !graph;
+            LHashtbl.add node_map next_t (!node_id, d_t+1, t);
+            (if construct_graph then node_id := !node_id + 1);
+            Queue.insert (d_t + 1 + (h next_t), next_t) q);
+          incr step;
+          Mutex.unlock mutex_queue
+        ) next_ts
+        end
+    in
+    let rec aux () =
+      if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
+      else
+        let (_, t) = Mutex.lock mutex_queue; 
+        (* print_string "Step : "; print_int !step; print_newline (); *)
+        (* print_string (Queue.to_string q); *)
+        Queue.extract q in
+        Mutex.unlock mutex_queue; one_step t; aux ()
     in
 
-    let rec aux q =
-      if Queue.is_empty q then ()
-      else
-        let (_, t), q = Queue.extract q in
-        aux (one_step t q)
-    in
-    let () = aux q in
-    let (_, s, n) = LHashtbl.find node_map normal_term in
+    let thread_number = 16 in
+    let domain_arr = Array.make thread_number (Domain.spawn aux) in
+    for i = 0 to thread_number - 1 do
+      Domain.join domain_arr.(i)
+    done;
+
+    try let (_, s, n) = LHashtbl.find node_map normal_term in
     let rec path = function
       | Lt.Var "-1" -> []
       | father -> 
@@ -470,49 +496,18 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
         if Lt.alpha_eq father f then []
         else father :: path f
     in
-    node_map, !graph, (List.rev (normal_term :: path n)), s
-
-  let idastar _ =
-    failwith "Tests ongoing"
-    (* let h = h_redex_count in *)
-    (* let term_db = Lt.deBruijn_index (Lt.of_string s) in *)
-    (* let found = ref false in *)
-    (**)
-    (* let normal_term = S.reduce_safer (S.Lt.of_string s) in *)
-    (* let normal_term_db = S.Lt.deBruijn_index (normal_term) in *)
-    (* *)
-    (* let rec dfs path bound : int list list * int = *)
-    (*   let current_cost = List.length path - 1 in *)
-    (*   let current_term_db = List.hd path in *)
-    (*   let cost = current_cost + h current_term_db in *)
-    (*   if cost > bound then (List.rev path, cost) *)
-    (*   else if List.equal ( = ) current_term_db normal_term_db then (found := true; (List.rev path, cost)) *)
-    (*   else *)
-    (*     let min_bound = ref max_int in *)
-    (*     let min_path = ref [] in *)
-    (*     let next_terms = reduce_step (Lt.of_deBruijn current_term_db) in *)
-    (*     let alr_found = ref false in *)
-    (*     List.iter (fun next_t -> *)
-    (*       let next_t_db = Lt.deBruijn_index next_t in *)
-    (*       if not (List.mem next_t_db path) then *)
-    (*         let (t_path, t_bound) = dfs (next_t_db :: path) bound in *)
-    (*         if !found && not !alr_found then (alr_found := true; min_bound := t_bound; min_path := t_path) *)
-    (*         else if !found then () *)
-    (*         else if t_bound < !min_bound then (min_bound := t_bound; min_path := t_path) *)
-    (*     ) next_terms; *)
-    (*     (!min_path, !min_bound) *)
-    (* in *)
-    (* *)
-    (* let rec loop bound = *)
-    (*   let t_path, t_bound = dfs [term_db] bound in *)
-    (*   if !found then t_path, bound *)
-    (*   else if t_bound = max_int then [], max_int *)
-    (*   else loop t_bound *)
-    (* in *)
-    (* let (path, length) = loop (h term_db) in ((List.map (Lt.of_deBruijn) path), length) *)
+    node_map, !graph, (List.rev (normal_term :: path n)), s with
+    | Not_found -> node_map, !graph, [], -1
 end
 
 module LONoStrategy = FNoStrategy(LeftOutermostStrategy)
+let loNoStrategy = (module LONoStrategy : NoStrategy)
+
 module LINoStrategy = FNoStrategy(LeftInnermostStrategy)
+let liNoStrategy = (module LINoStrategy : NoStrategy)
+
 module WLONoStrategy = FNoStrategy(WeakLeftOutermostStrategy)
+let wloNoStrategy = (module WLONoStrategy : NoStrategy)
+
 module WLINoStrategy = FNoStrategy(WeakLeftInnermostStrategy)
+let wliNoStrategy = (module WLINoStrategy : NoStrategy)

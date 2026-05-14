@@ -4,6 +4,8 @@ module type Ordered = sig
   val eq : t -> t -> bool 
   val lt : t -> t -> bool
 
+  val compare_eq : t -> t -> bool
+
   val to_string : t -> string
 end
 
@@ -15,10 +17,10 @@ module type Heap = sig
   val empty : heap
   val is_empty : heap -> bool
 
-  val insert : Elem.t -> heap -> heap
-  val extract : heap -> (Elem.t * heap)
-  val change_priority : Elem.t -> Elem.t -> heap -> heap
-  val prio_insert : Elem.t -> Elem.t -> heap -> heap
+  val insert : Elem.t -> heap -> unit
+  val extract : heap -> Elem.t
+  val change_priority : Elem.t -> Elem.t -> heap -> unit
+  val prio_insert : Elem.t -> Elem.t -> heap -> unit
 
   val to_string : heap -> string
 end
@@ -30,10 +32,10 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
   let ( &< ) = Elem.lt
 
   (* Size of heap, Length of array, array*)
-  type heap = int * int * Elem.t array
+  type heap = { mutable size: int; mutable length: int; mutable elts: Elem.t array }
 
-  let empty = (0, 0, [||])
-  let is_empty (n, _, _) = n = 0
+  let empty = {size = 0; length = 0; elts = [||]}
+  let is_empty h = h.size = 0
 
   let parent i = (i - 1) / 2
   let left_child i = 2 * i + 1
@@ -50,37 +52,44 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
       if arr.(i) &< arr.(p) then
         (swap arr i p;
          bubble_up arr p)
+      else if arr.(i) &= arr.(p) then
+        if Elem.compare_eq arr.(i) arr.(p) then
+          (swap arr i p;
+           bubble_up arr p)
 
   let rec bubble_down arr n i =
     let l = left_child i in
     let r = right_child i in
     let smallest = 
-      if l < n && arr.(l) &< arr.(i) then l else i in
-    let smallest = 
-      if r < n && arr.(r) &< arr.(smallest) then r else smallest in
+      if l < n && (arr.(l) &< arr.(i) || (arr.(l) &= arr.(i) && Elem.compare_eq arr.(l) arr.(i))) then l else i in
+    let smallest =
+      if r < n && (arr.(r) &< arr.(smallest) || (arr.(r) &= arr.(i) && Elem.compare_eq arr.(r) arr.(i))) then r else smallest in
     if smallest <> i then
       (swap arr i smallest;
        bubble_down arr n smallest)
 
-  let insert e ((n, m, arr) as h) =
-    if n = 0 then (1, 1, [|e|])
+  let insert e (h : heap) =
+    if h.size = 0 then 
+      (h.length <- 1; h.elts <- [|e|])
+    else if h.size = h.length then 
+      (h.length <- 2 * h.length; 
+      h.elts <- Array.init (2 * h.length) (fun i -> if i < h.size then h.elts.(i) else e))
     else 
-    let (n, m, arr) = if n = m then (n, 2 * m, Array.init (2 * m) (fun i -> if i < n then arr.(i) else e)) 
-                      else (arr.(n) <- e; h) in
-    bubble_up arr n; (n+1, m, arr)
-    
-  let extract (n, m, arr) =
-    if n = 0 then raise (Invalid_argument "Empty heap")
-    else 
-      let e = arr.(0) in
-      arr.(0) <- arr.(n-1);
-      bubble_down arr (n-1) 0;
-      (e, (n-1, m, arr))
+      h.elts.(h.size) <- e
+    ; bubble_up h.elts h.size
+    ; h.size <- h.size + 1
 
-  let change_priority_i i new_e ((n, _, arr) as h) =
-    if new_e &< arr.(i) then (arr.(i) <- new_e; bubble_up arr i)
-    else (arr.(i) <- new_e; bubble_down arr n i);
-    h
+  let extract h =
+    if h.size = 0 then raise (Invalid_argument "Empty heap")
+    else 
+      let e = h.elts.(0) in
+      h.elts.(0) <- h.elts.(h.size-1);
+      bubble_down h.elts (h.size-1) 0;
+      e
+
+  let change_priority_i i new_e h =
+    if new_e &< h.elts.(i) then (h.elts.(i) <- new_e; bubble_up h.elts i)
+    else (h.elts.(i) <- new_e; bubble_down h.elts h.size i)
 
   let find_index e n arr =
     let rec loop i =
@@ -90,20 +99,20 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
     in
     loop 0
 
-  let change_priority old_e new_e ((n, _, arr) as h) =
-    find_index old_e n arr 
+  let change_priority old_e new_e h =
+    find_index old_e h.size h.elts
     |> Option.get
     |> fun i -> change_priority_i i new_e h
 
-  let prio_insert old_e new_e ((n, _, arr) as h) =
-    match find_index old_e n arr with
+  let prio_insert old_e new_e h =
+    match find_index old_e h.size h.elts with
     | Some i -> change_priority_i i new_e h
     | None -> insert new_e h
 
-  let to_string (n, _, arr) =
+  let to_string h =
     let rec aux i acc =
-      if i >= n then acc
-      else aux (i + 1) (acc ^ (Elem.to_string arr.(i)) ^ " ")
+      if i >= h.size then acc
+      else aux (i + 1) (acc ^ (Elem.to_string h.elts.(i)) ^ "\n")
     in
     aux 0 ""
 end

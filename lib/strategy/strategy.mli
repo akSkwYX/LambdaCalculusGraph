@@ -23,17 +23,24 @@ module type NoStrategy = sig
   val reduce_step : Lt.t -> Lt.t list
   val reduce_graph : string -> int LHashtbl.t * Graph.t
   val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
-  val idastar : string -> Lt.t list * int
 
   val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 
 module LeftInnermostStrategy : Strategy
+val leftInnermostStrategy : (module Strategy)
 module LeftOutermostStrategy : Strategy
+val leftOutermostStrategy : (module Strategy)
 module WeakLeftOutermostStrategy : Strategy
+val weakLeftOutermostStrategy : (module Strategy)
 module WeakLeftInnermostStrategy : Strategy
+val weakLeftInnermostStrategy : (module Strategy)
 
 module LONoStrategy : NoStrategy
+val loNoStrategy : (module NoStrategy)
 module LINoStrategy : NoStrategy
+val liNoStrategy : (module NoStrategy)
 module WLONoStrategy : NoStrategy
+val wloNoStrategy : (module NoStrategy)
 module WLINoStrategy : NoStrategy
+val wliNoStrategy : (module NoStrategy)

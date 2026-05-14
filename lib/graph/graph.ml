@@ -51,7 +51,6 @@ module Graph (Elem : Element) : Graph with module Elem = Elem = struct
       (g := Array.init (max u v + 1) (fun i -> if i < !o then !g.(i) else []); o := max u v + 1);
     add_edge u v (o, s, g)
 
-
   let escape_label s =
     let b = Buffer.create (String.length s + 8) in
     String.iter (fun c ->

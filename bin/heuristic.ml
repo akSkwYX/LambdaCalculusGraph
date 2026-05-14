@@ -35,5 +35,5 @@ let () = Marshal.to_channel file t []
 let () = close_out file
 
 let file' = open_in_bin "heuristic_data"
-let t' : int LHashtbl.t = Marshal.from_channel file'
+let _ : int LHashtbl.t = Marshal.from_channel file'
 let () = close_in file'
