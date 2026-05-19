@@ -3,8 +3,9 @@
 #import "@preview/theorion:0.6.0": *
 #import cosmos.rainbow: *
 #import "@preview/pinit:0.2.2": *
-#import "@preview/fletcher:0.5.8": *
 #import "@preview/fletcher:0.5.8"
+#import "@preview/tdtr:0.5.5": *
+#import "@preview/muchpdf:0.1.2": muchpdf
 
 #show: show-theorion
 
@@ -176,19 +177,109 @@ $ & ceil "fact" ceil.r ( ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r ) \
   Si $u$ est faiblement normalisant, alors la stratégie externe gauche calcule la forme normale de $u$ par une réduction finie.
 ]
 
-= Programme et Optimisation
+= Programme et Optimisations
+
+== Algorithme
+
+#set align(left)
+1. Analyse lexicale : \
+String #sym.arrow.double Tokens \ \
+2. Analyse syntaxique : \
+Tokens #sym.arrow.double Arbre d'analyse \ \
+3. Construction du graphe : \
+Arbre d'analyse #sym.arrow.double Graphe des dérivations possibles \ \
+4. Recherche du plus cours chemin : \
+Graphe des dérivations possibles #sym.arrow.double Plus court chemin du terme initial à sa forme normale
+#set align(center)
 
 == Indice de De Bruijn
 
-$ lambda x . lambda y . x y #h(0.5cm) = #h(0.5cm) #pin("lambda1")lambda . #pin("lambda2")lambda . #pin("index1")1 #pin("index2")0 $
+$ lambda x . lambda y . x y #h(0.5cm) = #h(0.5cm) lambda#pin("lambda1") . lambda#pin("lambda2") . #pin("index1")1 #pin("index2")0 $
 
-#pinit-fletcher-edge(fletcher, "index1", end:"lambda1", bend:45deg, "->", start-dy: -0.6em, end-dy: -0.6em)
-#pinit-fletcher-edge(fletcher, "index2", end:"lambda2", bend:45deg, "->", start-dy: -1.2em, end-dy: -1.2em)
+#pinit-fletcher-edge(fletcher, "lambda1", end:"index1", bend:45deg, "<-", start-dy: -0.5cm, stroke: color.red)
+#pinit-fletcher-edge(fletcher, "lambda2", end:"index2", bend:45deg, "<-", start-dy: -0.5cm, stroke: color.blue)
+
+Liste d'entier ou renomage des variables #sym.arrow.double Illisible \
+Solution : Comparaison structurelle \
+
+#columns(2, gutter: 1cm)[
+#tidy-tree-graph(
+  draw-edge: (
+    tidy-tree-draws.horizontal-vertical-draw-edge,
+    (stroke: 0.8pt)
+  ),
+  draw-node: ((label,)) => (stroke: none, label: label),
+  spacing: (30pt, 30pt)
+)[
+  - $lambda . m$
+    - $lambda . n$
+      - $lambda . f$
+        - $"App"$
+          - $m$
+          - $"App"$
+            - $n$
+            - $f$
+]
+#colbreak()
+#tidy-tree-graph(
+  draw-edge: (
+    tidy-tree-draws.horizontal-vertical-draw-edge,
+    (stroke: 0.8pt)
+  ),
+  draw-node: ((label,)) => (stroke: none, label: label),
+  spacing: (30pt, 30pt)
+)[
+  - $lambda . x$
+    - $lambda . y$
+      - $lambda . z$
+        - $"App"$
+          - $x$
+          - $"App"$
+            - $y$
+            - $z$
+]
+]
 
 == Algorithme de recherche de plus cours chemin
 
-$ceil P ceil.r ceil 10 ceil.r$ #h(1cm) : #h(1cm) Ordre : $50551$ | Taille : $310 915$
+#grid(rows: auto, columns: (3fr, 2fr), gutter: 3cm,
+[
+  $ceil P ceil.r ceil 10 ceil.r #h(1cm) : #h(1cm) &"Ordre :" 50551 \ &"Taille :" 310 915$
+  #v(1cm)
+  Quelques complexité :
+
+  - #align(left)[Test d'égalité structurelle : $O(n dot.c v)$]
+  - #align(left)[Substitution de $x$ par $v$ dans $u$ : $O(n + m^2)$]
+  - #align(left)[Etape de réduction : $O(n^3)$]
+
+  n : nombre de noeuds dans l'arbre \
+  v : profondeur maximale des variables liées
+
+  #v(1cm)
+  Graphe infini...
+  #v(1cm)
+
+  #strike("Dijkstra") #sym.arrow.double $A^*$
+],
+[
+  #muchpdf(
+    read("slideshowPictures/predecessor5.pdf", encoding: none),
+  )
+]
+)
 
 == File de priorité
 
+#grid(rows: auto, columns: (auto, auto, auto), inset: 8pt, stroke: 0.5pt,
+[], [$ceil P ceil.r ceil 5 ceil.r$], [$ceil P ceil.r ceil 10 ceil.r$],
+[Binaire], [], [],
+[Binomial], [], [],
+[Fibonacci], [], [],
+[Strict Fibonacci], [], []
+)
+
+Parallélisation
+
 == Heuristique
+
+Importance de l'admissibilité : h_trivial #sym.arrow.double 25 steps / h_spine_redex 3 #sym.arrow.double 15 steps

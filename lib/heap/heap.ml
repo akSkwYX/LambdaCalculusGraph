@@ -84,6 +84,7 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
     else 
       let e = h.elts.(0) in
       h.elts.(0) <- h.elts.(h.size-1);
+      h.size <- h.size - 1;
       bubble_down h.elts (h.size-1) 0;
       e
 

@@ -241,12 +241,14 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let eq = Lt.alpha_eq
     let to_string = Lt.to_string end)
 
+  (* O(n) *)
   let rec is_normal = function
       Lt.Var _ -> true
     | Lt.Fun (_, body) -> is_normal body
     | Lt.App (Fun _,_) -> false
     | Lt.App (t1,t2) -> is_normal t1 && is_normal t2
 
+  (* O(n^3) *)
   let rec reduce_step : Lt.t -> Lt.t list = function
     | Var _ -> []
     | Fun (v, body) -> List.map ((fun t -> Fun (v, t)) : Lt.t -> Lt.t) (reduce_step body)
@@ -394,7 +396,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
 
   let astar construct_graph term =
-    let h : Lt.t -> int = h_leftoutermost in
+    let h : Lt.t -> int = h_trivial in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
@@ -448,8 +450,6 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
       else
         let (_, t) = Mutex.lock mutex_queue; 
-        (* print_string "Step : "; print_int !step; print_newline (); *)
-        (* print_string (Queue.to_string q); *)
         Queue.extract q in
         Mutex.unlock mutex_queue; one_step t; aux ()
     in

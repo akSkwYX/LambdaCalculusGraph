@@ -51,6 +51,7 @@ module LambdaTerm : LambdaTerm = struct
   type t = Var of string | Fun of string * t | App of t * t
   exception Parsing_error of string
 
+  (* O(n*v) with v the max binder depth *)
   let alpha_eq t1 t2 =
     let rec aux binders1 binders2 t1 t2 =
       match t1, t2 with
@@ -69,6 +70,7 @@ module LambdaTerm : LambdaTerm = struct
     in
     aux [] [] t1 t2
 
+  (* O(n) *)
   let [@warning "-32"] rec eq t1 t2 =
     match t1, t2 with
     | Var v1, Var v2 -> v1 = v2
@@ -76,47 +78,47 @@ module LambdaTerm : LambdaTerm = struct
     | App (s1, s2), App (t1, t2) -> eq s1 t1 && eq s2 t2
     | _ -> false
 
+  (* O(n * C(f)) *)
   let rec iter f term =
     match term with
     | Var _ -> f term
     | Fun (_, body) -> f term; iter f body
     | App (t1, t2) -> f term; iter f t1; iter f t2
 
+  (* O(n * C(f)) *)
   let rec map f term =
     match term with
     | Var _ -> f term
     | Fun (v, body) -> f (Fun (v, map f body))
     | App (t1, t2) -> f (App (map f t1, map f t2))
 
+  (* O(n * C(f)) *)
   let rec fold_left f acc term =
     match term with
     | Var _ -> f acc term
     | Fun (_, body) -> fold_left f (f acc term) body
     | App (t1, t2) -> fold_left f (fold_left f (f acc term) t1) t2
 
-  let rec filter f term =
-    match term with
-    | Var _ -> if f term then [term] else []
-    | Fun (_, body) ->
-      let rest = filter f body in
-      if f term then term :: rest else rest
-    | App (t1, t2) ->
-      let rest1 = filter f t1 in
-      let rest2 = filter f t2 in
-      if f term then term :: (rest1 @ rest2) else (rest1 @ rest2)
+  (* O(n * C(f)) *)
+  let filter f term =
+    fold_left (fun acc t -> if f t then t :: acc else acc) [] term
 
+  (* O(n) *)
   let length = fold_left (fun acc _ -> acc + 1) 0
 
+  (* O(n^2) *)
   let rec free_vars = function
     | Var v -> [v]
     | Fun (v, body) -> List.filter ((<>) v) (free_vars body)
     | App (t1,t2) -> free_vars t1 @ free_vars t2
 
+  (* O(n) *)
   let rec bound_vars = function
     | Var _ -> []
     | Fun (v, body) -> v :: (bound_vars body)
     | App (t1,t2) -> bound_vars t1 @ bound_vars t2
 
+  (* O(n) *)
   let find_fresh_var used_vars =
     let rec aux n =
       let candidate = "x" ^ string_of_int n in
@@ -125,20 +127,25 @@ module LambdaTerm : LambdaTerm = struct
     in
     aux 0
 
+  (* O(n + m^2) *)
   let rec substitute (x : string) (with_v : t) (in_u : t) =
     let free_in_v = free_vars with_v in
-    match in_u with 
-    | Var v when v = x -> with_v
-    | Var _ -> in_u
-    | Fun (v, _) when v = x -> in_u
-    | Fun (v, body) when List.exists ((=) v) free_in_v ->
-      let used_vars = (free_in_v @ (free_vars body) @ (bound_vars body)) in
-      let fresh_v = find_fresh_var used_vars in
-      let renamed_body = substitute v (Var fresh_v) body in
-      Fun (fresh_v, substitute x with_v renamed_body)
-    | Fun (v, body) -> Fun (v, substitute x with_v body)
-    | App (t1,t2) -> App (substitute x with_v t1, substitute x with_v t2)
+    let rec aux u =
+      match u with 
+      | Var v when v = x -> with_v
+      | Var _ -> u
+      | Fun (v, _) when v = x -> u
+      | Fun (v, body) when List.exists ((=) v) free_in_v ->
+        let used_vars = (free_in_v @ (free_vars body) @ (bound_vars body)) in
+        let fresh_v = find_fresh_var used_vars in
+        let renamed_body = substitute v (Var fresh_v) body in
+        Fun (fresh_v, aux renamed_body)
+      | Fun (v, body) -> Fun (v, aux body)
+      | App (t1,t2) -> App (aux t1, aux t2)
+    in
+    aux in_u
 
+  (* O(n) *)
   let redex_list t =
     let rec aux res = function
     | Var _ -> res
@@ -148,13 +155,7 @@ module LambdaTerm : LambdaTerm = struct
     in
     aux [] t
 
-  (* To Delete *)
-  (* let rec redex_list = function *)
-  (*   | Var _ -> [] *)
-  (*   | Fun (_, body) -> redex_list body *)
-  (*   | App (Fun(x, body), t2) -> App (Fun(x, body), t2) :: ((redex_list body) @ (redex_list t2)) *)
-  (*   | App (t1, t2) -> redex_list t1 @ redex_list t2 *)
-
+  (* O(n) *)
   let rec to_string_tree ?(indent=0) term =
     let indentation = String.make (indent * 2) ' ' in
     match term with
@@ -168,6 +169,7 @@ module LambdaTerm : LambdaTerm = struct
         to_string_tree ~indent:(indent+1) t2 ^ "\n" ^
         indentation ^ ")\n"
 
+  (* O(n) *)
   let rec compress = function
     | Fun (n1, Fun (f1, Fun (x1, App (Var f2, App (App (Var n2, Var f3), Var x2)))))
       when n1 = n2 && f1 = f2 && f2 = f3 && x1 = x2 ->
@@ -214,6 +216,7 @@ module LambdaTerm : LambdaTerm = struct
       "<" ^ to_string u ^ "," ^ to_string v ^ ">"
     | _ -> raise (Invalid_argument "Cannot compress term")
 
+  (* O(n) *)
   and to_string t =
     try compress t with
     | Invalid_argument _ ->
@@ -265,6 +268,7 @@ module LambdaTerm : LambdaTerm = struct
   (*   | -4 :: _ -> raise (Parsing_error "Unexpected closing parenthesis in de Bruijn index list") *)
   (*   | _ -> raise (Parsing_error "Invalid de Bruijn index list") *)
 
+  (* O(n) *)
   let rec to_ugly_string term =
     match term with
     | Var v -> "Var \"" ^ v ^ "\""
@@ -322,6 +326,7 @@ module LambdaTerm : LambdaTerm = struct
       Fun ("x", Var "x")
     | _ -> raise (Parsing_error ("[ " ^ (string_of_int (Token.index t)) ^ " ] Cannot extend token: " ^ (Token.to_string t)))
 
+  (* O(n) *)
   let of_string s =
     
     let rec drop_parens ?(acc=[]) ?(i=0) : Token.t list -> Token.t list * Token.t list = function
@@ -756,7 +761,7 @@ module LambdaBottomTerm : LambdaBottomTerm = struct
       (-3) :: to_deBruijn ~binders:binders t1 @ (-4) :: (-3) :: to_deBruijn ~binders:binders t2 @ [(-4)]
 end
 
-
+(* O(n*v) with v the max binder depth *)
 let alpha_compare (t1 : LambdaTerm.t) (t2 : LambdaBottomTerm.t) =
   let rec aux binders1 binders2 t1 t2 =
     match t1, t2 with
