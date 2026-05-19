@@ -1,7 +1,7 @@
 #import "@preview/touying:0.7.3": *
 #import themes.university: *
 #import "@preview/theorion:0.6.0": *
-#import cosmos.clouds: *
+#import cosmos.rainbow: *
 
 #show: show-theorion
 
@@ -16,11 +16,11 @@
   )
 )
 
-#let eqalpha = math.class("relation", math.attach(sym.eq, br: sym.alpha))
-
-#set text(30pt)
+#set text(20pt)
 #set align(center)
-#show math.equation: set text(30pt)
+#show math.equation: set text(20pt)
+
+#let red(x) = text(fill: color.red, x)
 
 #title-slide()
 
@@ -49,8 +49,6 @@ Rédex : $display((lambda x . M) N)$
   column-gutter: 3cm,
   rows: 1,
 [
-#set text(20pt)
-#show math.equation: set text(20pt)
 === $alpha$-réduction
 \
 Renommage \
@@ -68,17 +66,48 @@ $ (lambda x . u) v #h(1cm) beta #h(1cm) u[x := v] #h(1cm) arrow.double #h(1cm) a
 #set text(14pt)
 #show math.equation: set text(14pt)
 Passe au contexte :
-$ cases(delim: "|", reverse: #false, u_1 eqalpha u_2, v_1 eqalpha v_2) &arrow.double u_1 v_1 eqalpha u_2 v_2 \
-  u eqalpha v &arrow.double lambda x . u eqalpha lambda x . v $
+$ cases(delim: "|", reverse: #false, u_1 =_alpha u_2, v_1 =_alpha v_2) &arrow.double u_1 v_1 =_alpha u_2 v_2 \
+  u =_alpha v &arrow.double lambda x . u =_alpha lambda x . v $
 ]
 )
+
+== Expressivité et sucre
+
+#theorem[Equivalence fonction récursive / lambda terme][
+  Pour toute fonction récursive $f$, il existe un $lambda$-terme $ceil f ceil.r$ qui code correctement $f$\
+  $forall m = (m_1, ..., m_k) in NN^k slash f(m) "est défini",\ ceil f ceil.r(ceil m_1 ceil.r, ..., ceil m_k ceil.r) =_beta ceil f(m) ceil.r$
+]
+
+#underline("Exemples") : \ \
+$forall n in NN, ceil n ceil.r := lambda f,x . f^n x #h(0.7cm), #h(0.7cm) f^0 t := t #h(1cm) f^(n+1) t := f(f^n t)$ \
+#columns(2, gutter: 3cm)[
+  $ceil S ceil.r := lambda n, f, x . f(n f x)$ \
+  $ceil V ceil.r := lambda x, y . x$ \
+  $ceil <u, v> ceil.r := lambda z. z u v$
+
+  #colbreak()
+  $ceil + ceil.r := lambda m, n, f, x . m f (n f x)$ \
+  $ceil F ceil.r := lambda x, y . y$
+]
+
+== Récursivité
+
+$ ceil "fact" ceil.r =_beta lambda n . ceil "if" ceil.r (ceil "zero ?" ceil.r n) ceil 1 ceil.r (ceil times ceil.r n (ceil "fact" ceil.r (P n))) $
+$ ceil "fact" ceil.r = F ceil "fact" ceil.r $
+
+#theorem[Existence de point fixe][
+  Tout $lambda$-terme $F$ a un point fixe $x$, i.e. $x =_beta F x$
+]
+#theorem[Combinateur de point fixe][
+  Il existe un $lambda$-terme $Y$ sans variable libre tel que pour tout $F$, $Y F$ soit un point fixe de $F$.
+]
+#proof()[
+  Prendre $Y := lambda f . (lambda x . f (x x)) ( lambda x . f (x x))$
+]
 
 = Terminaison et confluence
 
 == Terminaison
-
-#set text(25pt)
-#show math.equation: set text(25pt)
 
 _Forme normale_ : on ne peut plus simplifier #sym.arrow.double Unicité / Existence ? \
 La $beta$ réduction ne termine pas toujours : $Omega := (lambda x . x x)(lambda x .x x)$
@@ -102,4 +131,56 @@ $ (lambda x . y) Omega $
 
 == Stratégies internes
 
+#columns(2, gutter: 2cm)[
+  ```C
+  int incr(int x){
+    return x + 1;
+  }
+  int main(){
+    int x = 4;
+    int y = incr(x);
+  }
+  ```
 
+  #colbreak()
+
+  ```Ocaml
+  let a = ref 0
+  let f x y = ()
+  let () = f (a:=1) (a:=2); print_int !a
+  ```
+]
+
+$ u v &arrow u' v arrow u' v' \
+      &arrow (lambda x . t) v arrow (lambda x . t) v' arrow t[x := v'] $
+
+== Stratégies externes
+
+$ (lambda x . u) v arrow u[x := v] $
+$ & ceil "fact" ceil.r ( red(ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r) ) \
+  arrow^* &(lambda n . ceil "if" ceil.r (ceil "zero ?" ceil.r n) ceil 1 ceil.r (ceil times ceil.r n (ceil "fact" ceil.r (ceil P ceil.r n))))( red(ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r) ) \
+  arrow & ceil "if" ceil.r (ceil "zero ?" ceil.r ( red(ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r) ))ceil 1 ceil.r (ceil times ceil.r( red(ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r) )(ceil "fact" ceil.r ( ceil P ceil.r ( red(ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r) )))) $
+
+#line(length: 75%)
+
+$ & ceil "fact" ceil.r ( ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r ) \
+  arrow^* &ceil "if" ceil.r ( ceil "zero ?" ceil.r ceil 3 ceil.r) ceil 1 ceil.r (ceil times ceil.r ceil 3 ceil.r (ceil "fact" ceil.r (ceil P ceil.r ceil 3 ceil.r))) $
+
+
+== LE Théorème
+
+#theorem[Standardisation][
+  Si $u$ est faiblement normalisant, alors la stratégie externe gauche calcule la forme normale de $u$ par une réduction finie.
+]
+
+= Programme et Optimisation
+
+== Pourquoi ?
+
+
+
+== Algorithme de recherche de plus cours chemin
+
+== File de priorité
+
+== Heuristique

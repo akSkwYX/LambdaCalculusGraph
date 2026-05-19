@@ -9,17 +9,14 @@ let lambda_tree_viewer term =
 
 (* ---------- Reduction graph ---------- *)
 
-let reduction_graph_viewer term (strategy : (module Strategy.Strategy)) =
-  (* let module Hashtbl = Strategy.Hashtbl in *)
-  (* let hst, g = Strategy.reduce_graph Term.v in *)
-  (* let reverse_hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in *)
-  (* let file = open_out "results/node_map.txt" in *)
-  (* let () = Hashtbl.iter (fun k v ->  *)
-  (*   output_string file (string_of_int v ^ " : " ^ (Strategy.Lt.to_string (Strategy.Lt.of_deBruijn k)) ^ "\n")) hst in *)
-  (* let () = close_out file in *)
-  (* Graph.Graph.to_pdf g reverse_hst [] "reduction_graph"; () *)
-  (* let _ = Sys.command "xdg-open results/reduction_graph.pdf &" in () *)
-  failwith "Tests ongoing"
+let reduction_graph_viewer term (strategy : (module Strategy.NoStrategy)) =
+  let module Strategy = (val strategy : Strategy.NoStrategy) in
+  let module SHashtbl = Strategy.LHashtbl in
+  let module Graph = Strategy.Graph in
+  let hst, g = Strategy.reduce_graph term in
+  let reverse_hst = SHashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (SHashtbl.length hst)) in
+  Graph.to_pdf g reverse_hst [] "reduction_graph";
+  Printf.printf "Ordre : %d | Taille : %d" (Graph.order g) (Graph.size g)
 
 (* ---------- A* ---------- *)
 
@@ -48,15 +45,14 @@ let extend_lambda_term lambda =
 
 (* ---------- Reduction ---------- *)
 
-let reduction_with_chosen_strategy term (strategy : (module Strategy.Strategy)) = 
-  (* let module Strategy = (val strategy : Strategy.Strategy) in *)
-  (* let module Graph = Strategy.Graph in *)
-  (* let reverse_hst hst = Hashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (Hashtbl.length hst)) in *)
-  (* let hst, g, steps = Strategy.reduce_graph term in *)
-  (* Graph.to_pdf g (reverse_hst hst) [] ("reduction_graph_" ^ Strategy.name); *)
-  (* print_endline ("Number of steps to normal form : " ^ (string_of_int steps)) *)
-  (* let _ = Sys.command "xdg-open results/reduction_graph_WLis.pdf &" in () *)
-  failwith "todo"
+let reduction_with_chosen_strategy term (strategy : (module Strategy.Strategy)) strategy_name = 
+  let module Strategy = (val strategy : Strategy.Strategy) in
+  let module SHashtbl = Strategy.LHashtbl in
+  let module Graph = Strategy.Graph in
+  let hst, g, steps = Strategy.reduce_graph term in
+  let reverse_hst = SHashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (SHashtbl.length hst)) in
+  Graph.to_pdf g reverse_hst [] ("reduction_graph_"^strategy_name);
+  print_endline ("Number of steps to normal form : " ^ (string_of_int steps))
 
 (* ---------- Main ---------- *)
 
@@ -69,9 +65,9 @@ let mode_choice choice term strategy construct_graph =
   | _ -> raise (Invalid_argument "Invalid strategy name : Lo | Li | Wlo | Wli")
   in
   match choice with
-  | "1" -> reduction_graph_viewer term strategyMod
+  | "1" -> reduction_graph_viewer term nostrategyMod
   | "2" -> astar term nostrategyMod construct_graph
-  | "3" -> reduction_with_chosen_strategy term strategyMod
+  | "3" -> reduction_with_chosen_strategy term strategyMod strategy
   | "4" -> lambda_tree_viewer term
   | "5" -> extend_lambda_term term
   | _ -> raise (Invalid_argument "Not a valid choice")

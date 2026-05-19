@@ -1,2 +1,9 @@
 // Factorielle 1
 (Ln.(([S]n)(Lc.(([IsZero]([P1]c))([P2]c))<[P]([P1]c),([*]([P1]c))([P2]c)>))<n,[1]>)[1]
+
+
+// Factorielle 1 (Récursif) (need weak)
+Y := Ly.(Lx.F(Lz.xxz))(Lx.F(Lz.xxz))y
+F := Lf.Ln.([IsZero]n)[1]([*]n(f([P]n)))
+
+fact := (Ly.(Lx.(Lf.Ln.([IsZero]n)[1]([*]n(f([P]n))))(Lz.xxz))(Lx.(Lf.Ln.([IsZero]n)[1]([*]n(f([P]n))))(Lz.xxz))y)[1]

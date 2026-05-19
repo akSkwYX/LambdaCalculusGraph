@@ -1,15 +1,14 @@
 module type Strategy = sig
   module Lt : LambdaTerm.LambdaTerm with type t = LambdaTerm.LambdaTerm.t
-  module Graph : Graph.Graph
-
-  val name : string
+  module LHashtbl : Hashtbl.S with type key = Lt.t
+  module Graph : Graph.Graph with type Elem.t = Lt.t
 
   val is_normal : Lt.t -> bool
   val distance : ?acc:int -> ?res_list:Lt.t list -> Lt.t -> int
   val reduce : Lt.t -> Lt.t
   val reduce_safer : Lt.t -> Lt.t
   val reduce_step : Lt.t -> Lt.t
-  val reduce_graph : string -> (int list, int) Hashtbl.t * Graph.t * int
+  val reduce_graph : string -> int LHashtbl.t * Graph.t * int
 end
 
 module type NoStrategy = sig
