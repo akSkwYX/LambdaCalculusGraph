@@ -2,6 +2,9 @@
 #import themes.university: *
 #import "@preview/theorion:0.6.0": *
 #import cosmos.rainbow: *
+#import "@preview/pinit:0.2.2": *
+#import "@preview/fletcher:0.5.8": *
+#import "@preview/fletcher:0.5.8"
 
 #show: show-theorion
 
@@ -92,7 +95,7 @@ $forall n in NN, ceil n ceil.r := lambda f,x . f^n x #h(0.7cm), #h(0.7cm) f^0 t 
 
 == Récursivité
 
-$ ceil "fact" ceil.r =_beta lambda n . ceil "if" ceil.r (ceil "zero ?" ceil.r n) ceil 1 ceil.r (ceil times ceil.r n (ceil "fact" ceil.r (P n))) $
+$ ceil "fact" ceil.r =_beta lambda n . ceil "if" ceil.r (ceil "zero ?" ceil.r n) ceil 1 ceil.r (ceil times ceil.r n (ceil "fact" ceil.r (ceil P ceil.r n))) $
 $ ceil "fact" ceil.r = F ceil "fact" ceil.r $
 
 #theorem[Existence de point fixe][
@@ -175,11 +178,16 @@ $ & ceil "fact" ceil.r ( ceil + ceil.r ceil 1 ceil.r ceil 2 ceil.r ) \
 
 = Programme et Optimisation
 
-== Pourquoi ?
+== Indice de De Bruijn
 
+$ lambda x . lambda y . x y #h(0.5cm) = #h(0.5cm) #pin("lambda1")lambda . #pin("lambda2")lambda . #pin("index1")1 #pin("index2")0 $
 
+#pinit-fletcher-edge(fletcher, "index1", end:"lambda1", bend:45deg, "->", start-dy: -0.6em, end-dy: -0.6em)
+#pinit-fletcher-edge(fletcher, "index2", end:"lambda2", bend:45deg, "->", start-dy: -1.2em, end-dy: -1.2em)
 
 == Algorithme de recherche de plus cours chemin
+
+$ceil P ceil.r ceil 10 ceil.r$ #h(1cm) : #h(1cm) Ordre : $50551$ | Taille : $310 915$
 
 == File de priorité
 

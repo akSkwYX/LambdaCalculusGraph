@@ -280,9 +280,12 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
           if LHashtbl.mem h next_t then
             Graph.add_edge t_id (LHashtbl.find h next_t) g
           else
+            begin
             LHashtbl.add h next_t !node_id;
             Graph.force_add_edge t_id !node_id g;
+            Queue.add next_t q;
             incr node_id
+            end
         ) next_ts;
         loop ()
         end
