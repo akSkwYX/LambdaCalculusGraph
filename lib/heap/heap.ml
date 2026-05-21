@@ -118,5 +118,132 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
     aux 0 ""
 end
 
+module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct
+  module Elem = Element
 
-module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = BinaryHeap (Element)
+  let ( &= ) = Elem.eq
+  let ( &< ) = Elem.lt
+  let ( &<< ) = Elem.compare_eq
+
+  type tree = Node of int * Elem.t * tree list
+
+  type heap = (tree list) ref
+
+  let rank = function
+    | Node (r, _, _) -> r
+
+  let root = function
+    | Node (_, e, _) -> e
+
+  let empty = ref []
+  let is_empty h = !h = []
+
+  let mergeTree s t =
+    match s, t with
+    | Node (r, e_s, children_s), Node (_, e_t, children_t) ->
+      if e_s &< e_t then
+        Node (r, e_s, t :: children_s)
+      else if e_t &< e_s then
+        Node (r, e_t, s :: children_t)
+      else if e_s &<< e_s then
+        Node (r, e_s, t :: children_s)
+      else
+        Node (r, e_t, s :: children_t)
+
+  let rec insTree t h =
+    match h with
+    | [] -> [t]
+    | t' :: tl ->
+        if rank t < rank t' then t :: h
+        else insTree (mergeTree t t') tl
+
+  let insert e h =
+    h := insTree (Node (0, e, [])) !h
+
+  let rec merge u v = match u, v with
+    | [], h | h, [] -> h
+    | t_u :: tl_u, t_v :: tl_v ->
+        if rank t_u < rank t_v then t_u :: merge tl_u v
+        else if rank t_v < rank t_u then t_v :: merge u tl_v
+        else insTree (mergeTree t_u t_v) (merge tl_u tl_v)
+
+  let rec removeMinTree h =
+    match h with
+    | [] -> raise (Invalid_argument "Empty heap")
+    | [t] -> t, []
+    | t :: tl ->
+        let t', tl' = removeMinTree tl in
+        if root t &< root t' then t, tl
+        else if root t' &< root t then t', t :: tl'
+        else if root t &<< root t' then t, tl
+        else t', t :: tl'
+
+  let extract h =
+    let (Node(_, e, children), h') = removeMinTree !h in
+    h := merge (List.rev children) h'; e
+
+  let rec change_priority_tree old_e new_e (Node (r, e, children)) =
+    if old_e &= e then
+      Some (Node (r, new_e, children))
+    else
+      let rec loop previous_children next_children =
+        match next_children with
+        | [] -> None
+        | t :: tl -> 
+          let t' = change_priority_tree old_e new_e t in
+          (match t' with
+          | None -> loop (t :: previous_children) tl
+          | Some t' -> Some (previous_children, t', tl))
+      in
+      match loop [] children with
+      | None -> None
+      | Some (previous_children, (Node(r', e', new_children) as t), next_children) ->
+          if e &< e' then
+            Some (Node (r, e, List.rev_append previous_children (t :: next_children)))
+          else if e' &< e then
+            Some (Node (r, e', List.rev_append previous_children (Node(r', e, new_children) :: next_children)))
+          else if e &<< e' then
+            Some (Node (r, e, List.rev_append previous_children (t :: next_children)))
+          else
+            Some (Node (r, e', List.rev_append previous_children (Node(r', e, new_children) :: next_children)))
+
+
+  let change_priority old_e new_e h =
+    let rec loop previous_trees next_trees =
+      match next_trees with
+      | [] -> previous_trees
+      | t :: tl ->
+        match change_priority_tree old_e new_e t with
+        | None -> loop (t :: previous_trees) tl
+        | Some t' -> List.rev_append previous_trees (t' :: tl)
+    in
+    h := loop [] !h
+
+  let prio_insert old_e new_e h =
+    let rec loop previous_trees next_trees =
+      match next_trees with
+      | [] -> None
+      | t :: tl ->
+        match change_priority_tree old_e new_e t with
+        | None -> loop (t :: previous_trees) tl
+        | Some t' -> Some (List.rev_append previous_trees (t' :: tl))
+    in
+    match loop [] !h with
+    | None -> insert new_e h
+    | Some h' -> h := h'
+
+  let to_string _ = failwith "todo"
+end
+
+module TwoThreeHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct
+  module Elem = Element
+
+  let ( &= ) = Elem.eq
+  let ( &< ) = Elem.lt
+  let ( &<< ) = Elem.compare_eq
+
+
+
+end
+
+module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = BinaryHeap(Element)

@@ -24,10 +24,13 @@ let astar term (strategy : (module Strategy.NoStrategy)) construct_graph =
   let module Strategy = (val strategy : Strategy.NoStrategy) in
   let module SHashtbl = Strategy.LHashtbl in
   let module Graph = Strategy.Graph in
+  let starting_time = Sys.time() in
   let hst, g, terms, steps = Strategy.astar construct_graph (Strategy.Lt.of_string term) in
+  let ending_time = Sys.time() in
   let () = print_endline ("Minimum step required to derivate term : " ^ (string_of_int steps)) in
   let () = print_endline ("Order of graph : " ^ (string_of_int (Graph.order g))) in
   let () = print_endline ("Size of graph : " ^ (string_of_int (Graph.size g))) in
+  let () = print_endline ("Execution time : " ^ (string_of_float (ending_time -. starting_time))) in
   let () = print_endline "Path :" in
   let () = List.iter (print_endline #~ Strategy.Lt.to_string) terms in
   if construct_graph then

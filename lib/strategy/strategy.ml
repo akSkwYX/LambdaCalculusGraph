@@ -396,7 +396,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
 
   let astar construct_graph term =
-    let h : Lt.t -> int = h_trivial in
+    let h : Lt.t -> int = h_spine_redex 3 in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
