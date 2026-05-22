@@ -1,0 +1,3 @@
+(test
+  (name queue)
+  (libraries alcotest heap))
