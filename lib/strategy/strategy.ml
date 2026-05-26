@@ -450,6 +450,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
       else
         let (_, t) = Mutex.lock mutex_queue; 
+        (* Printf.printf "Step : %d\nQueue length : %d\nQueue :%s\n" !step (Queue.size q) (Queue.to_string q); *)
         Queue.extract q in
         Mutex.unlock mutex_queue; one_step t; aux ()
     in

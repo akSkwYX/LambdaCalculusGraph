@@ -14,6 +14,8 @@ module type Heap = sig
   
   type heap
 
+  val size : heap -> int
+
   val empty : heap
   val is_empty : heap -> bool
 
@@ -34,6 +36,8 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
 
   (* Size of heap, Length of array, array*)
   type heap = { mutable size: int; mutable length: int; mutable elts: Elem.t array }
+
+  let size h = h.size
 
   let empty = {size = 0; length = 0; elts = [||]}
   let is_empty h = h.size = 0
@@ -60,7 +64,7 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
     let smallest = 
       if l < n && (arr.(l) &< arr.(i) || (arr.(l) &= arr.(i) && arr.(l) &<< arr.(i))) then l else i in
     let smallest =
-      if r < n && (arr.(r) &< arr.(smallest) || (arr.(r) &= arr.(i) && Elem.compare_eq arr.(r) arr.(i))) then r else smallest in
+      if r < n && (arr.(r) &< arr.(smallest) || (arr.(r) &= arr.(smallest) && arr.(r) &<< arr.(smallest))) then r else smallest in
     if smallest <> i then
       (swap arr i smallest;
        bubble_down arr n smallest)
@@ -124,7 +128,9 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
 
   type tree = Node of int * Elem.t * tree list
 
-  type heap = {mutable min_tree: int; mutable index_list: int list; trees: tree Darray.t}
+  type heap = {mutable trees : tree list; mutable size : int}
+
+  let size h = h.size
 
   let rank = function
     | Node (r, _, _) -> r
@@ -132,8 +138,8 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
   let root = function
     | Node (_, e, _) -> e
 
-  let empty = {min_tree = -1; index_list = []; trees = Darray.empty () }
-  let is_empty h = h.index_list = []
+  let empty = {trees = []; size = 0}
+  let is_empty h = h.size = 0
 
   let mergeTree s t =
     match s, t with
@@ -142,63 +148,23 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
         Node (r, e_s, t :: children_s)
       else if e_t &< e_s then
         Node (r, e_t, s :: children_t)
-      else if e_s &<< e_s then
+      else if e_s &<< e_t then
         Node (r, e_s, t :: children_s)
       else
         Node (r, e_t, s :: children_t)
 
-  let rec insTree t h =
-    match Darray.get h.trees (rank t) with
-    | None -> 
-      begin
-      Darray.set h.trees (rank t) (Some t);
-      if h.min_tree = -1 then
-        (h.min_tree <- rank t;
-        h.index_list <- [rank t])
-      else 
-        begin
-        let rec loop = function
-          | [] -> [rank t]
-          | t' :: tl ->
-            if rank t > t' then
-              rank t :: t' :: tl
-            else
-              t' :: loop tl
-        in
-        h.index_list <- loop h.index_list;
-        let min_tree = Option.get (Darray.get h.trees h.min_tree) in
-        if root t &< root min_tree
-           || (root t &= root min_tree && root t &<< root min_tree) then 
-          h.min_tree <- rank t
-        end
-      end
-    | Some t' -> (Darray.set h.trees (rank t) None;
-                 insTree (mergeTree t t') h)
+  let rec insTree t trees =
+    match trees with
+    | [] -> [t]
+    | t' :: tl ->
+        if rank t < rank t' then t :: trees
+        else insTree (mergeTree t t') tl
 
   let insert e h =
-    insTree (Node (0, e, [])) h
+    h.trees <- insTree (Node (0, e, [])) h.trees;
+    h.size <- h.size + 1
 
-  let merge u v = 
-    let new_arr = Darray.empty () in
-    let rec loop to_insert l_u l_v = match l_u, l_v with
-    | [], l | l, [] -> to_insert, l
-    | t_u :: tl_u, t_v :: tl_v ->
-      if t_u < t_v then 
-        (Darray.set new_arr t_u (Darray.get u.trees t_u);
-        let to_insert, new_index_list = loop to_insert tl_u l_v in
-        to_insert, t_u :: new_index_list)
-      else if t_v < t_u then
-        (Darray.set new_arr t_v (Darray.get v.trees t_v);
-        let to_insert, new_index_list = loop to_insert l_u tl_v in
-        to_insert, t_v :: new_index_list)
-      else
-        loop ((mergeTree (Option.get (Darray.get u.trees t_u)) (Option.get (Darray.get v.trees t_v))) :: to_insert)
-             tl_u tl_v
-    in
-    let to_insert, new_l = loop [] u.index_list v.index_list in
-
-
-    match u, v with
+  let rec merge u v = match u, v with
     | [], h | h, [] -> h
     | t_u :: tl_u, t_v :: tl_v ->
         if rank t_u < rank t_v then t_u :: merge tl_u v
@@ -217,8 +183,10 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
         else t', t :: tl'
 
   let extract h =
-    let (Node(_, e, children), h') = removeMinTree !h in
-    h := merge (List.rev children) h'; e
+    let (Node(_, e, children), h') = removeMinTree h.trees in
+    h.trees <- merge (List.rev children) h';
+    h.size <- h.size - 1;
+    e
 
   let rec change_priority_tree old_e new_e (Node (r, e, children)) =
     if old_e &= e then
@@ -255,7 +223,7 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
         | None -> loop (t :: previous_trees) tl
         | Some t' -> List.rev_append previous_trees (t' :: tl)
     in
-    h := loop [] !h
+    h.trees <- loop [] h.trees
 
   let prio_insert old_e new_e h =
     let rec loop previous_trees next_trees =
@@ -266,16 +234,16 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
         | None -> loop (t :: previous_trees) tl
         | Some t' -> Some (List.rev_append previous_trees (t' :: tl))
     in
-    match loop [] !h with
+    match loop [] h.trees with
     | None -> insert new_e h
-    | Some h' -> h := h'
+    | Some h' -> h.trees <- h'
 
   let rec tree_to_string (Node(r, e, children)) =
     "rank : " ^ string_of_int r ^ ", e : " ^ (Elem.to_string e) ^ "\n" ^ "  " ^
     (String.concat "\n" (List.map tree_to_string children))
 
   let to_string h =
-    (String.concat "\n" (List.map tree_to_string !h))
+    (String.concat "\n" (List.map tree_to_string h.trees))
 end
 
 module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct
@@ -285,12 +253,42 @@ module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = s
   let ( &= ) = Elem.eq
   let ( &<< ) = Elem.compare_eq
 
-  type heap = None
+  type tree = Node of Elem.t * tree list | Empty
 
-  let empty = failwith ""
-  let is_empty = failwith ""
+  let root = function
+    | Node (r, _) -> r
+    | Empty -> raise (Invalid_argument "Empty tree")
 
-  let insert = failwith ""
+  (* s <--> s *)
+  (* s <--> a <--> b <--> c <--> s *)
+  type 'a dlist = {mutable previous : 'a dlist; mutable e : 'a; mutable next : 'a dlist}
+  let dlist_empty () =
+    let rec s = {previous = s; e = Obj.magic (); next = s} in
+    s
+
+  type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int}
+
+  let size h = h.size
+
+  let empty = {min_tree = None; trees = dlist_empty (); size = 0}
+  let is_empty h = h.size = 0
+
+  let merge u v =
+    {min_tree = (match u.min_tree, v.min_tree with
+      | None, t | t, None -> t
+      | Some t, Some t' ->
+          (if root t.e &< root t'.e then Some t
+          else if root t'.e &< root t.e then Some t'
+          else if root t.e &<< root t'.e then Some t
+          else Some t'));
+      trees = 
+        (u.trees.previous.next <- v.trees.next;
+        u.trees.previous <- v.trees.previous;
+        u.trees);
+      size = u.size + v.size
+    }
+
+  let insert e h = 
 
   let extract = failwith ""
 

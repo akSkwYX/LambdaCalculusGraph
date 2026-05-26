@@ -13,6 +13,8 @@ module type Heap = sig
   
   type heap
 
+  val size : heap -> int
+
   val empty : heap
   val is_empty : heap -> bool
 
