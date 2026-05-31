@@ -396,7 +396,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
 
   let astar construct_graph term =
-    let h : Lt.t -> int = h_spine_redex 3 in
+    let h : Lt.t -> int = h_redex_count in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
@@ -407,7 +407,6 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 10000 in
     let () = LHashtbl.add node_map term (0, 0, Var "-1") in
     let q = Queue.empty in
-    let mutex_queue = Mutex.create () in
     let () = Queue.insert (0, term) q in
     let node_id = ref 1 in
     let found_normal_form = ref false in
@@ -429,7 +428,6 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
         let next_ts = reduce_step t in
         List.iter (fun next_t ->
           if Lt.alpha_eq next_t normal_term then found_normal_form := true;
-          Mutex.lock mutex_queue;
           if LHashtbl.mem node_map next_t then
             (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
             (if construct_graph then Graph.add_edge node_t node_next_t !graph);
@@ -441,26 +439,19 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
             LHashtbl.add node_map next_t (!node_id, d_t+1, t);
             (if construct_graph then node_id := !node_id + 1);
             Queue.insert (d_t + 1 + (h next_t), next_t) q);
-          incr step;
-          Mutex.unlock mutex_queue
+          incr step
         ) next_ts
         end
     in
     let rec aux () =
       if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
       else
-        let (_, t) = Mutex.lock mutex_queue; 
+        let (_, t) =
         (* Printf.printf "Step : %d\nQueue length : %d\nQueue :%s\n" !step (Queue.size q) (Queue.to_string q); *)
         Queue.extract q in
-        Mutex.unlock mutex_queue; one_step t; aux ()
+        one_step t; aux ()
     in
-
-    let thread_number = 16 in
-    let domain_arr = Array.make thread_number (Domain.spawn aux) in
-    for i = 0 to thread_number - 1 do
-      Domain.join domain_arr.(i)
-    done;
-
+    aux ();
     try let (_, s, n) = LHashtbl.find node_map normal_term in
     let rec path = function
       | Lt.Var "-1" -> []
@@ -469,7 +460,8 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
         if Lt.alpha_eq father f then []
         else father :: path f
     in
-    node_map, !graph, (List.rev (normal_term :: path n)), s with
+    node_map, !graph, (List.rev (normal_term :: path n)), s 
+    with
     | Not_found -> node_map, !graph, [], -1
 end
 

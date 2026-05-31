@@ -246,57 +246,57 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
     (String.concat "\n" (List.map tree_to_string h.trees))
 end
 
-module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct
-  module Elem = Element
+(* module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct *)
+(*   module Elem = Element *)
+(**)
+(*   let ( &< ) = Elem.lt *)
+(*   let ( &= ) = Elem.eq *)
+(*   let ( &<< ) = Elem.compare_eq *)
+(**)
+(*   type tree = Node of Elem.t * tree list | Empty *)
+(**)
+(*   let root = function *)
+(*     | Node (r, _) -> r *)
+(*     | Empty -> raise (Invalid_argument "Empty tree") *)
+(**)
+(*   (* s <--> s *) *)
+(*   (* s <--> a <--> b <--> c <--> s *) *)
+(*   type 'a dlist = {mutable previous : 'a dlist; mutable e : 'a; mutable next : 'a dlist} *)
+(*   let dlist_empty () = *)
+(*     let rec s = {previous = s; e = Obj.magic (); next = s} in *)
+(*     s *)
+(**)
+(*   type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int} *)
+(**)
+(*   let size h = h.size *)
+(**)
+(*   let empty = {min_tree = None; trees = dlist_empty (); size = 0} *)
+(*   let is_empty h = h.size = 0 *)
+(**)
+(*   let merge u v = *)
+(*     {min_tree = (match u.min_tree, v.min_tree with *)
+(*       | None, t | t, None -> t *)
+(*       | Some t, Some t' -> *)
+(*           (if root t.e &< root t'.e then Some t *)
+(*           else if root t'.e &< root t.e then Some t' *)
+(*           else if root t.e &<< root t'.e then Some t *)
+(*           else Some t')); *)
+(*       trees =  *)
+(*         (u.trees.previous.next <- v.trees.next; *)
+(*         u.trees.previous <- v.trees.previous; *)
+(*         u.trees); *)
+(*       size = u.size + v.size *)
+(*     } *)
+(**)
+(*   let insert = failwith "" *)
+(**)
+(*   let extract = failwith "" *)
+(**)
+(*   let change_priority = failwith "" *)
+(**)
+(*   let prio_insert = failwith "" *)
+(**)
+(*   let to_string = failwith "" *)
+(* end *)
 
-  let ( &< ) = Elem.lt
-  let ( &= ) = Elem.eq
-  let ( &<< ) = Elem.compare_eq
-
-  type tree = Node of Elem.t * tree list | Empty
-
-  let root = function
-    | Node (r, _) -> r
-    | Empty -> raise (Invalid_argument "Empty tree")
-
-  (* s <--> s *)
-  (* s <--> a <--> b <--> c <--> s *)
-  type 'a dlist = {mutable previous : 'a dlist; mutable e : 'a; mutable next : 'a dlist}
-  let dlist_empty () =
-    let rec s = {previous = s; e = Obj.magic (); next = s} in
-    s
-
-  type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int}
-
-  let size h = h.size
-
-  let empty = {min_tree = None; trees = dlist_empty (); size = 0}
-  let is_empty h = h.size = 0
-
-  let merge u v =
-    {min_tree = (match u.min_tree, v.min_tree with
-      | None, t | t, None -> t
-      | Some t, Some t' ->
-          (if root t.e &< root t'.e then Some t
-          else if root t'.e &< root t.e then Some t'
-          else if root t.e &<< root t'.e then Some t
-          else Some t'));
-      trees = 
-        (u.trees.previous.next <- v.trees.next;
-        u.trees.previous <- v.trees.previous;
-        u.trees);
-      size = u.size + v.size
-    }
-
-  let insert e h = 
-
-  let extract = failwith ""
-
-  let change_priority = failwith ""
-
-  let prio_insert = failwith ""
-
-  let to_string = failwith ""
-end
-
-module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = BinaryHeap(Element)
+module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = BinomialHeap(Element)
