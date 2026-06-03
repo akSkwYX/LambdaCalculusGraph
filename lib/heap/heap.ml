@@ -16,7 +16,7 @@ module type Heap = sig
 
   val size : heap -> int
 
-  val empty : heap
+  val empty : unit -> heap
   val is_empty : heap -> bool
 
   val insert : Elem.t -> heap -> unit
@@ -39,7 +39,7 @@ module BinaryHeap (Element : Ordered) : Heap with type Elem.t = Element.t = stru
 
   let size h = h.size
 
-  let empty = {size = 0; length = 0; elts = [||]}
+  let empty () = {size = 0; length = 0; elts = [||]}
   let is_empty h = h.size = 0
 
   let parent i = (i - 1) / 2
@@ -138,7 +138,7 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
   let root = function
     | Node (_, e, _) -> e
 
-  let empty = {trees = []; size = 0}
+  let empty () = {trees = []; size = 0}
   let is_empty h = h.size = 0
 
   let mergeTree s t =
@@ -246,57 +246,179 @@ module BinomialHeap (Element : Ordered) : Heap with type Elem.t = Element.t = st
     (String.concat "\n" (List.map tree_to_string h.trees))
 end
 
-(* module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct *)
-(*   module Elem = Element *)
-(**)
-(*   let ( &< ) = Elem.lt *)
-(*   let ( &= ) = Elem.eq *)
-(*   let ( &<< ) = Elem.compare_eq *)
-(**)
-(*   type tree = Node of Elem.t * tree list | Empty *)
-(**)
-(*   let root = function *)
-(*     | Node (r, _) -> r *)
-(*     | Empty -> raise (Invalid_argument "Empty tree") *)
-(**)
-(*   (* s <--> s *) *)
-(*   (* s <--> a <--> b <--> c <--> s *) *)
-(*   type 'a dlist = {mutable previous : 'a dlist; mutable e : 'a; mutable next : 'a dlist} *)
-(*   let dlist_empty () = *)
-(*     let rec s = {previous = s; e = Obj.magic (); next = s} in *)
-(*     s *)
-(**)
-(*   type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int} *)
-(**)
-(*   let size h = h.size *)
-(**)
-(*   let empty = {min_tree = None; trees = dlist_empty (); size = 0} *)
-(*   let is_empty h = h.size = 0 *)
-(**)
-(*   let merge u v = *)
-(*     {min_tree = (match u.min_tree, v.min_tree with *)
-(*       | None, t | t, None -> t *)
-(*       | Some t, Some t' -> *)
-(*           (if root t.e &< root t'.e then Some t *)
-(*           else if root t'.e &< root t.e then Some t' *)
-(*           else if root t.e &<< root t'.e then Some t *)
-(*           else Some t')); *)
-(*       trees =  *)
-(*         (u.trees.previous.next <- v.trees.next; *)
-(*         u.trees.previous <- v.trees.previous; *)
-(*         u.trees); *)
-(*       size = u.size + v.size *)
-(*     } *)
-(**)
-(*   let insert = failwith "" *)
-(**)
-(*   let extract = failwith "" *)
-(**)
-(*   let change_priority = failwith "" *)
-(**)
-(*   let prio_insert = failwith "" *)
-(**)
-(*   let to_string = failwith "" *)
-(* end *)
+module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = struct
+  module Elem = Element
 
-module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = BinomialHeap(Element)
+  let ( &< ) = Elem.lt
+  let ( &= ) = Elem.eq
+  let ( &<< ) = Elem.compare_eq
+
+  (* s <--> s *)
+  (* s <--> a <--> b <--> c <--> s *)
+  type 'a dlist = {mutable previous : 'a dlist; e : 'a; mutable next : 'a dlist}
+  let dlist_empty () =
+    let rec s = {previous = s; e = Obj.magic (); next = s} in
+    s
+  
+  let dlist_merge a b =
+    if b.next != b then begin
+      a.previous.next <- b.next;
+      b.next.previous <- a.previous;
+      a.previous <- b.previous;
+      b.previous.next <- a
+    end
+
+  let dlist_remove d =
+    d.previous.next <- d.next;
+    d.next.previous <- d.previous
+
+  let dlist_iter f d =
+    let rec aux d' =
+      if d'.next == d then ()
+      else (f d'; aux d'.next)
+    in
+    aux d.next
+
+  type tree = {mutable parent : tree option; mutable self_link : tree dlist; mutable degree : int; mutable mark : bool; e : Elem.t; children : tree dlist}
+
+  let tree_merge (t : tree dlist) (t' : tree dlist) =
+    let t, t' = 
+      if t.e.e &< t'.e.e then t, t'
+      else if t'.e.e &< t.e.e then t', t
+      else if t.e.e &<< t'.e.e then t, t'
+      else t', t
+    in
+    t.e.degree <- t.e.degree + 1;
+    t'.e.parent <- Some t.e;
+    let nlink = {previous = t.e.children; e = t'.e; next = t.e.children.next} in
+    t.e.children.next.previous <- nlink;
+    t.e.children.next <- nlink
+
+  type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int}
+
+  let size h = h.size
+
+  let empty () = {min_tree = None; trees = dlist_empty (); size = 0}
+  let is_empty h = h.size = 0
+
+  let merge u v =
+    if is_empty u then 
+      (u.min_tree <- v.min_tree;
+      u.trees <- v.trees;
+      u.size <- v.size)
+    else if is_empty v then ()
+    else
+    (u.min_tree <- (match u.min_tree, v.min_tree with
+      | None, t | t, None -> t
+      | Some t, Some t' ->
+          (if t.e.e &< t'.e.e then Some t
+          else if t'.e.e &< t.e.e then Some t'
+          else if t.e.e &<< t'.e.e then Some t
+          else Some t'));
+    u.trees <-
+        (dlist_merge u.trees v.trees;
+        u.trees);
+    u.size <- u.size + v.size)
+
+  let insert e h =
+    let dl = dlist_empty () in
+    dl.next <- {previous = dl; e = {parent = None; self_link = dlist_empty (); degree = 0; mark = false; e = e; children = dlist_empty ()}; next = dl};
+    dl.previous <- dl.next;
+    merge h {min_tree = Some dl.next; trees = dl; size = 1}
+
+  let extract h =
+    if h.size = 1 then
+      let min = (Option.get h.min_tree).e.e in
+      h.min_tree <- None;
+      dlist_remove (Option.get h.min_tree);
+      h.size <- 0;
+      min
+    else begin
+    match h.min_tree with
+    | None -> raise (Invalid_argument "Empty heap")
+    | Some min_tree ->
+      let min = min_tree.e.e in
+      let children = min_tree.e.children in
+      dlist_remove min_tree;
+      dlist_merge h.trees children;
+      let rank_array = Array.make 64 None in
+      dlist_iter (fun t -> 
+        let t = t in
+        let d_t = ref t.e.degree in
+        while Option.is_some rank_array.(!d_t) do
+          tree_merge t (Option.get rank_array.(!d_t));
+          d_t := !t.e.degree;
+          rank_array.(!d_t) <- None
+        done;
+        rank_array.(!d_t) <- Some !t) h.trees
+      ;
+      h.trees <- dlist_empty ();
+      let first_index = Option.get @@ Array.find_index Option.is_some rank_array in
+      let t = Option.get rank_array.(first_index) in
+      let nlink = {previous = h.trees; e = t; next = h.trees.next} in
+      h.trees.next.previous <- nlink;
+      h.trees.next <- nlink;
+      rank_array.(first_index) <- None;
+      h.min_tree <- Some (Array.fold_left (fun (min_tree : tree dlist) t -> 
+        match t with 
+        | None -> min_tree 
+        | Some t ->
+          let nlink = {previous = h.trees; e = t; next = h.trees.next} in
+          h.trees.next.previous <- nlink;
+          h.trees.next <- nlink;
+          if t.e &< min_tree.e.e then nlink
+          else if min_tree.e.e &< t.e then min_tree
+          else if t.e &<< min_tree.e.e then nlink
+          else min_tree) nlink rank_array)
+      ;
+      h.size <- h.size - 1;
+      min end
+
+  let change_priority old_e new_e h = 
+    let rec find_in_dlist d =
+      let rec find_in_tree init (t : tree dlist) =
+        if t.next = init then false
+        else if t.e.e &= old_e then
+          begin
+          dlist_remove t;
+          let nlink = {previous = h.trees; e = {parent = None; self_link = dlist_empty (); degree = t.e.degree; mark = false; e = new_e; children = t.e.children}; next = h.trees.next} in
+          h.trees.next.previous <- nlink;
+          h.trees.next <- nlink;
+          if new_e &< (Option.get h.min_tree).e.e
+            || new_e &= (Option.get h.min_tree).e.e && new_e &<< (Option.get h.min_tree).e.e then h.min_tree <- Some nlink;
+          let parent_opt = ref t.e.parent in
+          while Option.is_some !parent_opt && (Option.get !parent_opt).mark do
+            let parent = Option.get !parent_opt in
+            parent.degree <- parent.degree - 1;
+            dlist_remove parent.self_link;
+            let nlink = {previous = h.trees; e = {parent = None; self_link = dlist_empty (); degree = parent.degree; mark = false; e = parent.e; children = parent.children}; next = h.trees.next} in
+            h.trees.next.previous <- nlink;
+            h.trees.next <- nlink;
+            parent_opt := parent.parent
+          done;
+          (match !parent_opt with
+          | None -> ()
+          | Some p -> p.mark <- true);
+          true
+          end
+        else
+          let rec aux acc d =
+            if d.next = t.e.children then acc
+            else aux (acc || find_in_tree t.e.children d) d.next
+          in
+          aux false t.e.children
+      in
+      if d.next = h.trees then raise Not_found
+      else if find_in_tree d d then ()
+      else find_in_dlist d.next
+    in
+    find_in_dlist h.trees
+
+  let prio_insert old_e new_e h =
+    try change_priority old_e new_e h with
+    | Not_found -> insert new_e h
+
+  let to_string _ = failwith ""
+end
+
+module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = FibonacciHeap(Element)

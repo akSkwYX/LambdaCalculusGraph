@@ -14,11 +14,11 @@ let elem_testable = Alcotest.testable (fun ppf x -> Format.pp_print_string ppf (
 (* --- The Test Cases --- *)
 
 let test_empty () =
-  let h = TestQueue.empty in
+  let h = TestQueue.empty () in
   Alcotest.(check bool) "New heap is empty" true (TestQueue.is_empty h)
 
 let test_insert_and_extract () =
-  let h = TestQueue.empty in
+  let h = TestQueue.empty () in
   TestQueue.insert 5 h;
   TestQueue.insert 3 h;
   TestQueue.insert 10 h;
@@ -31,7 +31,7 @@ let test_insert_and_extract () =
   Alcotest.(check bool) "Heap is empty again" true (TestQueue.is_empty h)
 
 let test_change_priority () =
-  let h = TestQueue.empty in
+  let h = TestQueue.empty () in
   TestQueue.insert 10 h;
   TestQueue.insert 20 h;
   

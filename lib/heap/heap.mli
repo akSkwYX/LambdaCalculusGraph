@@ -15,7 +15,7 @@ module type Heap = sig
 
   val size : heap -> int
 
-  val empty : heap
+  val empty : unit -> heap
   val is_empty : heap -> bool
 
   val insert : Elem.t -> heap -> unit

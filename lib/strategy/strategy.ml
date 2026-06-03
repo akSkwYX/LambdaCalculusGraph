@@ -406,7 +406,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       -value : node_id, distance of astar algorithm, predecessor*)
     let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 10000 in
     let () = LHashtbl.add node_map term (0, 0, Var "-1") in
-    let q = Queue.empty in
+    let q = Queue.empty () in
     let () = Queue.insert (0, term) q in
     let node_id = ref 1 in
     let found_normal_form = ref false in
