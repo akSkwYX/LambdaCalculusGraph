@@ -22,7 +22,7 @@ module type NoStrategy = sig
   val reduce_step : Lt.t -> Lt.t list
   val reduce_graph : string -> int LHashtbl.t * Graph.t
   val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
-
+  val ida_star : Lt.t -> unit
   val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 

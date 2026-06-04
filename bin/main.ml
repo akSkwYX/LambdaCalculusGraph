@@ -39,6 +39,15 @@ let astar term (strategy : (module Strategy.NoStrategy)) construct_graph =
     Graph.to_pdf g reverse_hst terms "astar_graph"
     end
 
+(* ---------- IDA* ---------- *)
+
+let ida_star term (strategy : (module Strategy.NoStrategy)) _ =
+  let module Strategy = (val strategy : Strategy.NoStrategy) in
+  let starting_time = Sys.time() in
+  let () = Strategy.ida_star (Strategy.Lt.of_string term) in
+  let ending_time = Sys.time() in
+  let () = print_endline ("Execution time : " ^ (string_of_float (ending_time -. starting_time))) in ()
+
 (* ---------- Extended Lambda Term ---------- *)
 
 let extend_lambda_term lambda =
@@ -75,8 +84,9 @@ let mode_choice choice term strategy construct_graph =
   | "1" -> reduction_graph_viewer term nostrategyMod
   | "2" -> astar term nostrategyMod construct_graph
   | "3" -> reduction_with_chosen_strategy term strategyMod strategy
-  | "4" -> lambda_tree_viewer term
-  | "5" -> extend_lambda_term term
+  | "4" -> ida_star term nostrategyMod construct_graph
+  | "5" -> lambda_tree_viewer term
+  | "6" -> extend_lambda_term term
   | _ -> raise (Invalid_argument "Not a valid choice")
 
 let prechoice = try Sys.argv.(1) with | Invalid_argument _ -> ""

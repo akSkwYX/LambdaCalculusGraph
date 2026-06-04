@@ -31,6 +31,7 @@ module type NoStrategy = sig
   val reduce_step : Lt.t -> Lt.t list
   val reduce_graph : string -> int LHashtbl.t * Graph.t
   val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
+  val ida_star : Lt.t -> unit
   val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 
@@ -505,6 +506,141 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     node_map, !graph, (List.rev (normal_term :: path n)), s 
     with
     | Not_found -> node_map, !graph, [], -1
+
+  let astar_no_decrease construct_graph term =
+    let h : Lt.t -> int = h_spine_redex 3 in
+
+    let f = open_out "results/astar_output.txt" in
+    let () = close_out f in
+    
+    (* Structures initialisation *)
+    let graph = ref Graph.empty in
+    let () = if construct_graph then Graph.add_node !graph in
+    (*Hashtbl represent : 
+      -key : term,
+      -value : node_id, distance of astar algorithm, predecessor*)
+    let (node_map : (int * int * Lt.t) LHashtbl.t) = LHashtbl.create 10000 in
+    let () = LHashtbl.add node_map term (0, 0, Var "-1") in
+    let q = Queue.empty () in
+    let () = Queue.insert (0, term) q in
+    let node_id = ref 1 in
+    let found_normal_form = ref false in
+
+    let limited = false in
+    let max_step = 10000 in
+    let step = ref 1 in
+
+    (* Calculation of normal term *)
+    let normal_term = S.reduce_safer term in
+    let () = print_endline (Lt.to_string normal_term) in
+
+    let one_step t =
+      if limited && !step >= max_step then ()
+      else if is_normal t then ()
+      else if !found_normal_form then ()
+      else begin 
+        let node_t, d_t, _ = LHashtbl.find node_map t in
+        let next_ts = reduce_step_hnf t in
+        List.iter (fun next_t ->
+          if Lt.alpha_eq next_t normal_term then found_normal_form := true;
+          if LHashtbl.mem node_map next_t then
+            (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
+            (if construct_graph then Graph.add_edge node_t node_next_t !graph);
+            if d_t + 1 < d_next_t then
+              (LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t);
+              Queue.prio_insert (0, next_t) (d_t + 1 + (h next_t), next_t) q))
+          else
+            (if construct_graph then Graph.force_add_edge node_t !node_id !graph;
+            LHashtbl.add node_map next_t (!node_id, d_t+1, t);
+            (if construct_graph then node_id := !node_id + 1);
+            Queue.insert (d_t + 1 + (h next_t), next_t) q);
+          incr step
+        ) next_ts
+        end
+    in
+    let rec aux () =
+      if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
+      else
+        let f = Out_channel.open_gen [Out_channel.Open_append; Out_channel.Open_creat] 1 "results/astar_output.txt" in
+        let (_, t) =
+        Printf.fprintf f "Step : %d\nQueue length : %d\nQueue :%s\n" !step (Queue.size q) (Queue.to_string q);
+        Out_channel.close f;
+        Queue.extract q in
+        one_step t; aux ()
+    in
+    aux ();
+    try let (_, s, n) = LHashtbl.find node_map normal_term in
+    let rec path = function
+      | Lt.Var "-1" -> []
+      | father -> 
+        let (_,_,f) = LHashtbl.find node_map father in
+        if Lt.alpha_eq father f then []
+        else father :: path f
+    in
+    node_map, !graph, (List.rev (normal_term :: path n)), s 
+    with
+    | Not_found -> node_map, !graph, [], -1
+    
+
+  let ida_star_with_tt term =
+    let h : Lt.t -> int = h_spine_redex 3 in
+    let normal_term = S.reduce_safer term in
+    let is_goal t = Lt.alpha_eq t normal_term in
+    
+    let tt : (int) LHashtbl.t = LHashtbl.create 100000 in
+    
+    let rec search path g treshold =
+      let current_term = List.hd path in
+      let f = g + h current_term in
+      
+      if f > treshold then Some f
+      else if is_goal current_term then Some (-1)
+      else begin
+        let should_expand = try
+            let best_g = LHashtbl.find tt current_term in
+            if g >= best_g then false
+            else (LHashtbl.replace tt current_term g; true)
+          with Not_found ->
+            LHashtbl.add tt current_term g; true
+        in
+        if not should_expand then None
+        else begin
+          let next_ts = reduce_step current_term in
+          let min_exceeded = ref max_int in
+          let goal_found = ref false in
+
+          List.iter (fun next_t ->
+            if not !goal_found then
+              if not (List.exists (Lt.alpha_eq next_t) path) then
+                match search (next_t :: path) (g + 1) treshold with
+                | Some (-1) -> goal_found := true
+                | Some next_treshold ->
+                  if next_treshold < !min_exceeded then
+                    min_exceeded := next_treshold
+                | None -> ()
+          ) next_ts;
+
+          if !goal_found then Some (-1)
+          else if !min_exceeded = max_int then None
+          else Some !min_exceeded
+        end
+      end
+    in
+    let initial_treshold = h term in
+    let rec iterate treshold =
+      LHashtbl.clear tt;
+      match search [term] 0 treshold with
+      | Some (-1) ->
+        Printf.printf "Shortest path found within treshold %d\n" treshold
+      | Some next_treshold ->
+        iterate next_treshold
+      | None ->
+        Printf.printf "Search space exhausted\n"
+  in
+  iterate initial_treshold
+
+  let ida_star = ida_star_with_tt
+          
 end
 
 module LONoStrategy = FNoStrategy(LeftOutermostStrategy)
