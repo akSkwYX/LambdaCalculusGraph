@@ -274,12 +274,12 @@ module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = s
 
   let dlist_iter f d =
     let rec aux d' =
-      if d'.next == d then ()
+      if d' == d then ()
       else (f d'; aux d'.next)
     in
     aux d.next
 
-  type tree = {mutable parent : tree option; mutable self_link : tree dlist; mutable degree : int; mutable mark : bool; e : Elem.t; children : tree dlist}
+  type tree = {mutable parent : tree option; mutable self_link : tree dlist; mutable degree : int; mutable mark : bool; mutable e : Elem.t; children : tree dlist}
 
   let tree_merge (t : tree dlist) (t' : tree dlist) =
     let t, t' = 
@@ -291,8 +291,10 @@ module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = s
     t.e.degree <- t.e.degree + 1;
     t'.e.parent <- Some t.e;
     let nlink = {previous = t.e.children; e = t'.e; next = t.e.children.next} in
+    t'.e.self_link <- nlink;
     t.e.children.next.previous <- nlink;
-    t.e.children.next <- nlink
+    t.e.children.next <- nlink;
+    t
 
   type heap = {mutable min_tree : tree dlist option; mutable trees : tree dlist; mutable size : int}
 
@@ -329,8 +331,8 @@ module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = s
   let extract h =
     if h.size = 1 then
       let min = (Option.get h.min_tree).e.e in
-      h.min_tree <- None;
       dlist_remove (Option.get h.min_tree);
+      h.min_tree <- None;
       h.size <- 0;
       min
     else begin
@@ -340,85 +342,147 @@ module FibonacciHeap (Element : Ordered) : Heap with type Elem.t = Element.t = s
       let min = min_tree.e.e in
       let children = min_tree.e.children in
       dlist_remove min_tree;
+      dlist_iter (fun child -> child.e.parent <- None) children;
       dlist_merge h.trees children;
       let rank_array = Array.make 64 None in
       dlist_iter (fun t -> 
-        let t = t in
-        let d_t = ref t.e.degree in
+        let t = ref t in
+        let d_t = ref !t.e.degree in
         while Option.is_some rank_array.(!d_t) do
-          tree_merge t (Option.get rank_array.(!d_t));
-          d_t := !t.e.degree;
-          rank_array.(!d_t) <- None
+          t := tree_merge !t (Option.get rank_array.(!d_t));
+          rank_array.(!d_t) <- None;
+          d_t := !t.e.degree
         done;
         rank_array.(!d_t) <- Some !t) h.trees
       ;
       h.trees <- dlist_empty ();
       let first_index = Option.get @@ Array.find_index Option.is_some rank_array in
       let t = Option.get rank_array.(first_index) in
-      let nlink = {previous = h.trees; e = t; next = h.trees.next} in
-      h.trees.next.previous <- nlink;
-      h.trees.next <- nlink;
+      t.previous <- h.trees;
+      t.next <- h.trees.next;
+      h.trees.next.previous <- t;
+      h.trees.next <- t;
       rank_array.(first_index) <- None;
       h.min_tree <- Some (Array.fold_left (fun (min_tree : tree dlist) t -> 
         match t with 
         | None -> min_tree 
         | Some t ->
-          let nlink = {previous = h.trees; e = t; next = h.trees.next} in
-          h.trees.next.previous <- nlink;
-          h.trees.next <- nlink;
-          if t.e &< min_tree.e.e then nlink
-          else if min_tree.e.e &< t.e then min_tree
-          else if t.e &<< min_tree.e.e then nlink
-          else min_tree) nlink rank_array)
+          t.previous <- h.trees;
+          t.next <- h.trees.next;
+          t.e.self_link <- dlist_empty ();
+          h.trees.next.previous <- t;
+          h.trees.next <- t;
+          if t.e.e &< min_tree.e.e then t
+          else if min_tree.e.e &< t.e.e then min_tree
+          else if t.e.e &<< min_tree.e.e then t
+          else min_tree) t rank_array)
       ;
       h.size <- h.size - 1;
       min end
 
   let change_priority old_e new_e h = 
+    let rec find_in_tree (t : tree dlist) =
+      (* 1. Check the current node *)
+      if t.e.e &= old_e then
+        begin
+        dlist_remove t;
+        t.e.parent <- None;
+        t.e.self_link <- dlist_empty ();
+        t.e.mark <- false;
+        t.e.e <- new_e;
+        t.previous <- h.trees;
+        t.next <- h.trees.next;
+        h.trees.next.previous <- t;
+        h.trees.next <- t;
+        if new_e &< (Option.get h.min_tree).e.e
+          || new_e &= (Option.get h.min_tree).e.e && new_e &<< (Option.get h.min_tree).e.e then h.min_tree <- Some t;
+        
+        let parent_opt = ref t.e.parent in
+        while Option.is_some !parent_opt && (Option.get !parent_opt).mark do
+          let parent = Option.get !parent_opt in
+          dlist_remove parent.self_link;
+          parent.degree <- parent.degree - 1;
+          parent.mark <- false;
+          parent.self_link.previous <- h.trees;
+          parent.self_link.next <- h.trees.next;
+          h.trees.next.previous <- parent.self_link;
+          h.trees.next <- parent.self_link;
+          parent.self_link <- dlist_empty ();
+          parent_opt := parent.parent;
+          parent.parent <- None
+        done;
+        (match !parent_opt with
+        | None -> ()
+        | Some p -> p.mark <- true);
+        true
+        end
+      else
+
+        let rec aux d =
+          if d == t.e.children then false
+          else if find_in_tree d then true
+          else aux d.next
+        in
+        aux t.e.children.next
+    in
+
     let rec find_in_dlist d =
-      let rec find_in_tree init (t : tree dlist) =
-        if t.next = init then false
-        else if t.e.e &= old_e then
-          begin
-          dlist_remove t;
-          let nlink = {previous = h.trees; e = {parent = None; self_link = dlist_empty (); degree = t.e.degree; mark = false; e = new_e; children = t.e.children}; next = h.trees.next} in
-          h.trees.next.previous <- nlink;
-          h.trees.next <- nlink;
-          if new_e &< (Option.get h.min_tree).e.e
-            || new_e &= (Option.get h.min_tree).e.e && new_e &<< (Option.get h.min_tree).e.e then h.min_tree <- Some nlink;
-          let parent_opt = ref t.e.parent in
-          while Option.is_some !parent_opt && (Option.get !parent_opt).mark do
-            let parent = Option.get !parent_opt in
-            parent.degree <- parent.degree - 1;
-            dlist_remove parent.self_link;
-            let nlink = {previous = h.trees; e = {parent = None; self_link = dlist_empty (); degree = parent.degree; mark = false; e = parent.e; children = parent.children}; next = h.trees.next} in
-            h.trees.next.previous <- nlink;
-            h.trees.next <- nlink;
-            parent_opt := parent.parent
-          done;
-          (match !parent_opt with
-          | None -> ()
-          | Some p -> p.mark <- true);
-          true
-          end
-        else
-          let rec aux acc d =
-            if d.next = t.e.children then acc
-            else aux (acc || find_in_tree t.e.children d) d.next
-          in
-          aux false t.e.children
-      in
-      if d.next = h.trees then raise Not_found
-      else if find_in_tree d d then ()
+      if d == h.trees then raise Not_found
+      else if find_in_tree d then ()
       else find_in_dlist d.next
     in
-    find_in_dlist h.trees
+    
+    find_in_dlist h.trees.next
+
 
   let prio_insert old_e new_e h =
     try change_priority old_e new_e h with
     | Not_found -> insert new_e h
 
-  let to_string _ = failwith ""
+  let to_string h =
+  if h.size = 0 then "Empty Heap"
+  else
+    let buf = Buffer.create 1024 in
+    
+    (* Helper to recursively format a tree node with indentation *)
+    let rec format_tree indent (t : tree dlist) =
+      if t.e.parent = None then 
+        Buffer.add_string buf (Printf.sprintf "%s• Node(val: %s, deg: %d, mark: %b)\n" 
+          indent (Elem.to_string t.e.e) t.e.degree t.e.mark)
+      else
+        Buffer.add_string buf (Printf.sprintf "%s├── Node(val: %s, deg: %d, mark: %b)\n" 
+          indent (Elem.to_string t.e.e) t.e.degree t.e.mark);
+          
+      (* Recurse through children if any exist *)
+      let child_sentinel = t.e.children in
+      let rec format_children curr =
+        if curr == child_sentinel then ()
+        else begin
+          format_tree (indent ^ "    ") curr;
+          format_children curr.next
+        end
+      in
+      format_children child_sentinel.next
+    in
+
+    (* Format the root list *)
+    Buffer.add_string buf (Printf.sprintf "--- Fibonacci Heap (Size: %d) ---\n" h.size);
+    (match h.min_tree with
+     | None -> Buffer.add_string buf "Min pointer: None\n"
+     | Some m -> Buffer.add_string buf (Printf.sprintf "Min pointer points to: %s\n" (Elem.to_string m.e.e)));
+    
+    Buffer.add_string buf "Root List:\n";
+    let rec format_roots curr =
+      if curr == h.trees then ()
+      else begin
+        format_tree "  " curr;
+        format_roots curr.next
+      end
+    in
+    format_roots h.trees.next;
+    Buffer.add_string buf "---------------------------------\n";
+    Buffer.contents buf
+
 end
 
 module Queue (Element : Ordered) : Heap with type Elem.t = Element.t = FibonacciHeap(Element)

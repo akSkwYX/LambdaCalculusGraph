@@ -52,10 +52,14 @@ let reduction_with_chosen_strategy term (strategy : (module Strategy.Strategy)) 
   let module Strategy = (val strategy : Strategy.Strategy) in
   let module SHashtbl = Strategy.LHashtbl in
   let module Graph = Strategy.Graph in
-  let hst, g, steps = Strategy.reduce_graph term in
+  let hst, g, nform, steps = Strategy.reduce_graph term in
   let reverse_hst = SHashtbl.fold (fun k v acc -> Hashtbl.add acc v k; acc) hst (Hashtbl.create (SHashtbl.length hst)) in
   Graph.to_pdf g reverse_hst [] ("reduction_graph_"^strategy_name);
-  print_endline ("Number of steps to normal form : " ^ (string_of_int steps))
+  print_endline ("Number of steps to normal form : " ^ (string_of_int steps));
+  if Strategy.is_normal nform then
+    print_endline ("Normal form : " ^ (Strategy.Lt.to_string nform))
+  else
+    print_endline ("Found cycling term : " ^ (Strategy.Lt.to_string nform))
 
 (* ---------- Main ---------- *)
 

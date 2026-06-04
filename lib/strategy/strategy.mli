@@ -8,7 +8,7 @@ module type Strategy = sig
   val reduce : Lt.t -> Lt.t
   val reduce_safer : Lt.t -> Lt.t
   val reduce_step : Lt.t -> Lt.t
-  val reduce_graph : string -> int LHashtbl.t * Graph.t * int
+  val reduce_graph : string -> int LHashtbl.t * Graph.t * Lt.t * int
 end
 
 module type NoStrategy = sig

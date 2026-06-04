@@ -327,8 +327,9 @@ module LambdaTerm : LambdaTerm = struct
     | _ -> raise (Parsing_error ("[ " ^ (string_of_int (Token.index t)) ^ " ] Cannot extend token: " ^ (Token.to_string t)))
 
   (* O(n) *)
+
   let of_string s =
-    
+
     let rec drop_parens ?(acc=[]) ?(i=0) : Token.t list -> Token.t list * Token.t list = function
       | [] -> raise (Parsing_error "Unmatched opening parenthesis")
       | {lexeme=LParen; _} as tok :: t -> drop_parens ~acc:(tok :: acc) ~i:(i+1) t
@@ -337,8 +338,6 @@ module LambdaTerm : LambdaTerm = struct
         else drop_parens ~acc:(tok :: acc) ~i:(i-1) t
       | h :: t -> drop_parens ~acc:(h :: acc) ~i:i t
     in
-
-    (* Ca marche probablement pas ça *)
     let rec parse_couple ?(t1=[]) ?(t2=[]) ?(i=0) ?(b=false) 
       : Token.t list -> Token.t list * Token.t list * Token.t list = function
       | [] -> raise (Parsing_error "Unmatched opening angle bracket")
@@ -357,54 +356,149 @@ module LambdaTerm : LambdaTerm = struct
         if not b then parse_couple ~t1:(h :: t1) ~t2:t2 ~i:i ~b:b rest
         else parse_couple ~t1:t1 ~t2:(h :: t2) ~i:i ~b:b rest
     in
-
     let tokens = Token.list_of_string s in
-    let rec parse : Token.t list -> t = function
-    | [] -> raise (Parsing_error "Unexpected end of term") 
-    | {lexeme=Var v; _} :: rest ->
-      (match rest with
-      | [] -> Var v
-      | _ -> App (Var v, parse rest))
-    | ({lexeme=Number _; _} as t) :: rest
-    | ({lexeme=Succ; _} as t) :: rest
-    | ({lexeme=Plus; _} as t) :: rest
-    | ({lexeme=Time; _} as t) :: rest
-    | ({lexeme=True; _} as t) :: rest
-    | ({lexeme=False; _} as t) :: rest
-    | ({lexeme=P1; _} as t) :: rest 
-    | ({lexeme=P2; _} as t) :: rest
-    | ({lexeme=P; _} as t) :: rest 
-    | ({lexeme=IsZero; _} as t) :: rest
-    | ({lexeme=Y; _} as t) :: rest
-    | ({lexeme=I; _} as t) :: rest ->
-      (match rest with
-      | [] -> extend t
-      | _ -> App (extend t, parse rest))
-    | {lexeme=Lambda; _} :: paramsxbody ->
-      let params, body = parse_params paramsxbody in
-      let body_term = parse body in
-      make_fun params body_term
-    | {lexeme=LParen; _} :: rest ->
-      begin
-      let t1, t1_rest = drop_parens rest in
-      let t1 = parse t1 in
-      match t1_rest with
-      | [] -> t1
-      | _ -> (let t2 = parse t1_rest in
-              App (t1, t2))
-      end
-    | {lexeme=LAngle; _} :: rest ->
-      let t1, t2, rest = parse_couple rest in
-      let t1 = parse t1 in
-      let t2 = parse t2 in
-      (match rest with
-      | [] -> Fun ("s", App (App (Var "s", t1), t2))
-      | _ -> App (Fun ("s", App (App (Var "s", t1), t2)), parse rest))
-    | {lexeme=RParen; _} :: _ -> raise (Parsing_error ("Unexpected closing parenthesis"))
-    | {lexeme=RAngle; _} :: _ -> raise (Parsing_error ("Unexpected closing angle"))
-    | t -> raise (Parsing_error ("Unexpected token when parsing term : " ^ (Token.to_string (List.hd t))))
+
+    (* Parses a single indivisible term *)
+    let rec parse_atom : Token.t list -> t * Token.t list = function
+      | [] -> raise (Parsing_error "Unexpected end of term")
+      | {lexeme=Token.Var v; _} :: rest -> (Var v, rest)
+      | ({lexeme=Token.Number _; _} as t) :: rest
+      | ({lexeme=Token.Succ; _} as t) :: rest
+      | ({lexeme=Token.Plus; _} as t) :: rest
+      | ({lexeme=Token.Time; _} as t) :: rest
+      | ({lexeme=Token.True; _} as t) :: rest
+      | ({lexeme=Token.False; _} as t) :: rest
+      | ({lexeme=Token.P1; _} as t) :: rest 
+      | ({lexeme=Token.P2; _} as t) :: rest
+      | ({lexeme=Token.P; _} as t) :: rest 
+      | ({lexeme=Token.IsZero; _} as t) :: rest
+      | ({lexeme=Token.Y; _} as t) :: rest
+      | ({lexeme=Token.I; _} as t) :: rest -> (extend t, rest)
+
+      | {lexeme=Token.Lambda; _} :: paramsxbody ->
+          let params, body_tokens = parse_params paramsxbody in
+          (* A lambda abstraction extends as far right as possible *)
+          let body_term, rest = parse_term body_tokens in
+          (make_fun params body_term, rest)
+          
+      | {lexeme=Token.LParen; _} :: rest ->
+          let inside_parens, after_parens = drop_parens rest in
+          let term, _ = parse_term inside_parens in
+          (term, after_parens)
+          
+      | {lexeme=Token.LAngle; _} :: rest ->
+          let t1_toks, t2_toks, after_angle = parse_couple rest in
+          let t1, _ = parse_term t1_toks in
+          let t2, _ = parse_term t2_toks in
+          (Fun ("s", App (App (Var "s", t1), t2)), after_angle)
+          
+      | {lexeme=Token.RParen; _} :: _ -> raise (Parsing_error "Unexpected closing parenthesis")
+      | {lexeme=Token.RAngle; _} :: _ -> raise (Parsing_error "Unexpected closing angle")
+      | t :: _ -> raise (Parsing_error ("Unexpected token when parsing term: " ^ Token.to_string t))
+
+    (* Greedily accumulates applications on the left *)
+    and parse_apps acc (tokens : Token.t list) =
+      match tokens with
+      | [] -> (acc, [])
+      (* If we hit a scope-closing token, we stop accumulating and return *)
+      | {lexeme=Token.RParen; _} :: _ 
+      | {lexeme=Token.RAngle; _} :: _ -> (acc, tokens)
+      | _ ->
+          (* Grab the next atom and wrap the accumulator *)
+          let next_atom, rest = parse_atom tokens in
+          parse_apps (App (acc, next_atom)) rest
+
+    (* Kicks off the parsing process for a sequence of tokens *)
+    and parse_term tokens =
+      let first_atom, rest = parse_atom tokens in
+      parse_apps first_atom rest
     in
-    parse tokens
+
+    let final_term, unparsed = parse_term tokens in
+    if unparsed <> [] then 
+      raise (Parsing_error "Tokens remaining after successful parse (Check parentheses!)")
+    else 
+      final_term
+
+  (* (* O(n) *) *)
+  (* let of_string s = *)
+  (**)
+  (*   let rec drop_parens ?(acc=[]) ?(i=0) : Token.t list -> Token.t list * Token.t list = function *)
+  (*     | [] -> raise (Parsing_error "Unmatched opening parenthesis") *)
+  (*     | {lexeme=LParen; _} as tok :: t -> drop_parens ~acc:(tok :: acc) ~i:(i+1) t *)
+  (*     | {lexeme=RParen; _} as tok :: t -> *)
+  (*       if i = 0 then List.rev acc, t *)
+  (*       else drop_parens ~acc:(tok :: acc) ~i:(i-1) t *)
+  (*     | h :: t -> drop_parens ~acc:(h :: acc) ~i:i t *)
+  (*   in *)
+  (**)
+  (*   (* Ca marche probablement pas ça *) *)
+  (*   let rec parse_couple ?(t1=[]) ?(t2=[]) ?(i=0) ?(b=false)  *)
+  (*     : Token.t list -> Token.t list * Token.t list * Token.t list = function *)
+  (*     | [] -> raise (Parsing_error "Unmatched opening angle bracket") *)
+  (*     | {lexeme=LAngle; _} as tok :: rest ->  *)
+  (*       if not b then parse_couple ~t1:(tok :: t1) ~t2:t2 ~i:(i+1) ~b:b rest *)
+  (*       else parse_couple ~t1:t1 ~t2:(tok :: t2) ~i:(i+1) ~b:b rest *)
+  (*     | {lexeme=RAngle; _} as tok :: rest -> *)
+  (*       if i = 0 then List.rev t1, List.rev t2, rest *)
+  (*       else if not b then parse_couple ~t1:(tok :: t1) ~t2:t2 ~i:(i-1) ~b:b rest *)
+  (*       else parse_couple ~t1:t1 ~t2:(tok :: t2) ~i:(i-1) ~b:b rest *)
+  (*     | {lexeme=Coma; _} as tok :: rest -> *)
+  (*       if not b && i = 0 then parse_couple ~t1:t1 ~t2:t2 ~i:i ~b:true rest *)
+  (*       else if not b then parse_couple ~t1:(tok :: t1) ~t2:t2 ~i:i ~b:b rest *)
+  (*       else parse_couple ~t1:t1 ~t2:(tok :: t2) ~i:i ~b:b rest *)
+  (*     | h :: rest -> *)
+  (*       if not b then parse_couple ~t1:(h :: t1) ~t2:t2 ~i:i ~b:b rest *)
+  (*       else parse_couple ~t1:t1 ~t2:(h :: t2) ~i:i ~b:b rest *)
+  (*   in *)
+  (**)
+  (*   let tokens = Token.list_of_string s in *)
+  (*   let rec parse : Token.t list -> t = function *)
+  (*   | [] -> raise (Parsing_error "Unexpected end of term")  *)
+  (*   | {lexeme=Var v; _} :: rest -> *)
+  (*     (match rest with *)
+  (*     | [] -> Var v *)
+  (*     | _ -> App (Var v, parse rest)) *)
+  (*   | ({lexeme=Number _; _} as t) :: rest *)
+  (*   | ({lexeme=Succ; _} as t) :: rest *)
+  (*   | ({lexeme=Plus; _} as t) :: rest *)
+  (*   | ({lexeme=Time; _} as t) :: rest *)
+  (*   | ({lexeme=True; _} as t) :: rest *)
+  (*   | ({lexeme=False; _} as t) :: rest *)
+  (*   | ({lexeme=P1; _} as t) :: rest  *)
+  (*   | ({lexeme=P2; _} as t) :: rest *)
+  (*   | ({lexeme=P; _} as t) :: rest  *)
+  (*   | ({lexeme=IsZero; _} as t) :: rest *)
+  (*   | ({lexeme=Y; _} as t) :: rest *)
+  (*   | ({lexeme=I; _} as t) :: rest -> *)
+  (*     (match rest with *)
+  (*     | [] -> extend t *)
+  (*     | _ -> App (extend t, parse rest)) *)
+  (*   | {lexeme=Lambda; _} :: paramsxbody -> *)
+  (*     let params, body = parse_params paramsxbody in *)
+  (*     let body_term = parse body in *)
+  (*     make_fun params body_term *)
+  (*   | {lexeme=LParen; _} :: rest -> *)
+  (*     begin *)
+  (*     let t1, t1_rest = drop_parens rest in *)
+  (*     let t1 = parse t1 in *)
+  (*     match t1_rest with *)
+  (*     | [] -> t1 *)
+  (*     | _ -> (let t2 = parse t1_rest in *)
+  (*             App (t1, t2)) *)
+  (*     end *)
+  (*   | {lexeme=LAngle; _} :: rest -> *)
+  (*     let t1, t2, rest = parse_couple rest in *)
+  (*     let t1 = parse t1 in *)
+  (*     let t2 = parse t2 in *)
+  (*     (match rest with *)
+  (*     | [] -> Fun ("s", App (App (Var "s", t1), t2)) *)
+  (*     | _ -> App (Fun ("s", App (App (Var "s", t1), t2)), parse rest)) *)
+  (*   | {lexeme=RParen; _} :: _ -> raise (Parsing_error ("Unexpected closing parenthesis")) *)
+  (*   | {lexeme=RAngle; _} :: _ -> raise (Parsing_error ("Unexpected closing angle")) *)
+  (*   | t -> raise (Parsing_error ("Unexpected token when parsing term : " ^ (Token.to_string (List.hd t)))) *)
+  (*   in *)
+  (*   parse tokens *)
 
   let rec to_deBruijn ?(binders=[]) = function
     | Var v ->

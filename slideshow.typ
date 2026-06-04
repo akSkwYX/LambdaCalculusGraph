@@ -323,10 +323,10 @@ Solution : Comparaison structurelle \
 
 #grid(rows: auto, columns: (auto, auto, auto, auto), inset: 8pt, stroke: 0.5pt,
 [], [$ceil P ceil.r ceil 5 ceil.r$], [$ceil P ceil.r ceil 10 ceil.r$], [$ceil "fact" ceil.r ceil 1 ceil.r$],
-[Binaire], [0.012s], [3m44s], [],
-[Binomial], [0.012s], [3m25s], [],
+[Binaire], [0.010s], [4m20s], [],
+[Binomial], [0.010s], [5m38s], [],
 [2-3], [], [], [],
-[Fibonacci], [], [], [],
+[Fibonacci], [0.010s], [], [],
 [Pairing], [], [], []
 )
 

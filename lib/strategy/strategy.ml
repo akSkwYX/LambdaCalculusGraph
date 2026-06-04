@@ -17,7 +17,7 @@ module type Strategy = sig
   val reduce : Lt.t -> Lt.t
   val reduce_safer : Lt.t -> Lt.t
   val reduce_step : Lt.t -> Lt.t
-  val reduce_graph : string -> int LHashtbl.t * Graph.t * int
+  val reduce_graph : string -> int LHashtbl.t * Graph.t * Lt.t * int
 end
 
 module type NoStrategy = sig
@@ -93,7 +93,8 @@ module FStrategy (Ps : PartialStrategy) : Strategy = struct
     let rec aux t =
       let next_t = Ps.reduce_step t in
       if LHashtbl.mem node_map next_t then 
-        Graph.add_edge (LHashtbl.find node_map t) (LHashtbl.find node_map next_t) graph
+        (Graph.add_edge (LHashtbl.find node_map t) (LHashtbl.find node_map next_t) graph; 
+        next_t)
       else
         begin
         LHashtbl.add node_map next_t !node_id;
@@ -102,8 +103,8 @@ module FStrategy (Ps : PartialStrategy) : Strategy = struct
         aux next_t
         end
     in
-    aux term;
-    node_map, graph, !node_id - 1
+    let nform = aux term in
+    node_map, graph, nform, !node_id - 1
 end
 
 module PartialLeftInnermostStrategy : PartialStrategy = struct
@@ -248,8 +249,44 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     | Lt.App (Fun _,_) -> false
     | Lt.App (t1,t2) -> is_normal t1 && is_normal t2
 
+  let rec flatten : Lt.t -> Lt.t * Lt.t list = function
+    | App (t1, t2) ->
+        let head, args = flatten t1 in
+        (head, args @ [t2])
+    | t -> (t, [])
+
+  let rebuild head args =
+    List.fold_left (fun acc arg -> Lt.App (acc, arg)) head args
+
   (* O(n^3) *)
-  let rec reduce_step : Lt.t -> Lt.t list = function
+  let [@warning "-32"] rec reduce_step_hnf (t : Lt.t) : Lt.t list =
+    let head, args = flatten t in
+    match head with
+    | Var _ when args <> [] ->
+        let rec reduce_first_available left_args right_args = 
+          match right_args with
+          | [] -> []
+          | arg :: rest ->
+              let arg_reds = reduce_step_hnf arg in
+              if arg_reds = [] then
+                reduce_first_available (left_args @ [arg]) rest
+              else
+                List.map (fun arg' -> rebuild head (left_args @ (arg' :: rest))) arg_reds
+        in
+        reduce_first_available [] args
+    | _ ->
+      match t with
+      | Var _ -> []
+      | Fun (v, body) -> List.map ((fun t -> Fun (v, t)) : Lt.t -> Lt.t) (reduce_step_hnf body)
+      | App (Fun (v, body), t2) ->
+        Lt.substitute v t2 body :: (List.map (fun t -> Lt.App (Fun (v, t), t2)) (reduce_step_hnf body)) @
+        (List.map (fun t -> Lt.App (Fun (v, body), t)) (reduce_step_hnf t2))
+      | App (t1, t2) ->
+        (List.map (fun t -> Lt.App (t, t2)) (reduce_step_hnf t1)) @
+        (List.map (fun t -> Lt.App (t1, t)) (reduce_step_hnf t2))
+
+  let [@warning "-32"] rec reduce_step (t : Lt.t) : Lt.t list =
+    match t with
     | Var _ -> []
     | Fun (v, body) -> List.map ((fun t -> Fun (v, t)) : Lt.t -> Lt.t) (reduce_step body)
     | App (Fun (v, body), t2) ->
@@ -396,7 +433,10 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
 
   let astar construct_graph term =
-    let h : Lt.t -> int = h_redex_count in
+    let h : Lt.t -> int = h_spine_redex 3 in
+
+    let f = open_out "results/astar_output.txt" in
+    let () = close_out f in
     
     (* Structures initialisation *)
     let graph = ref Graph.empty in
@@ -425,7 +465,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       else if !found_normal_form then ()
       else begin 
         let node_t, d_t, _ = LHashtbl.find node_map t in
-        let next_ts = reduce_step t in
+        let next_ts = reduce_step_hnf t in
         List.iter (fun next_t ->
           if Lt.alpha_eq next_t normal_term then found_normal_form := true;
           if LHashtbl.mem node_map next_t then
@@ -446,8 +486,10 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let rec aux () =
       if Queue.is_empty q || !found_normal_form || (limited && !step >= max_step) then ()
       else
+        let f = Out_channel.open_gen [Out_channel.Open_append; Out_channel.Open_creat] 1 "results/astar_output.txt" in
         let (_, t) =
-        (* Printf.printf "Step : %d\nQueue length : %d\nQueue :%s\n" !step (Queue.size q) (Queue.to_string q); *)
+        Printf.fprintf f "Step : %d\nQueue length : %d\nQueue :%s\n" !step (Queue.size q) (Queue.to_string q);
+        Out_channel.close f;
         Queue.extract q in
         one_step t; aux ()
     in

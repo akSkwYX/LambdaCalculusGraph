@@ -1,0 +1,36 @@
+barendregt:
+  type: Book
+  title: The lambda Calculus - Its Syntax and Semantics
+  author: H.P. Barendregt
+
+goubault:
+  type: Misc
+  title: Lambda-calcul et langages fonctionnels
+  author: Jean Goubault-Larrecq
+  url: https://lsv.ens-paris-saclay.fr/~goubault/Lambda/lambda.pdf
+
+needed:
+  type: Article
+  title: Needed Reduction and Spine Strategies for the Lambda Calculus
+  author: H.P. Barendregt
+  url: https://www.sciencedirect.com/science/article/pii/0890540187900010?via%3Dihub
+
+lamreduce:
+  type: Article
+  title: Demonstrating Lambda Calculus Reduction
+  author: Peter Sestoft
+
+levy:
+  type: Article
+  title: Optimal Reductions in the lambda-calculus
+  author: Jean-Jacques Lévy
+
+astarwik:
+  type: Web
+  title: A* search algorithm Variants - Wikipedia
+  url: https://en.wikipedia.org/wiki/A*_search_algorithm#Variants
+
+dheap:
+  type: Web
+  title: D-ary heap - Wikipedia
+  url: https://en.wikipedia.org/wiki/D-ary_heap
