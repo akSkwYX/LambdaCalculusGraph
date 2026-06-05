@@ -31,7 +31,7 @@ module type NoStrategy = sig
   val reduce_step : Lt.t -> Lt.t list
   val reduce_graph : string -> int LHashtbl.t * Graph.t
   val astar : bool -> Lt.t -> (int * int * Lt.t) LHashtbl.t * Graph.t * Lt.t list * int
-  val ida_star : Lt.t -> unit
+  val ida_star : Lt.t -> Lt.t list * Lt.t * int
   val brack : int -> Lt.t -> LambdaTerm.LambdaBottomTerm.t
 end
 
@@ -433,7 +433,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let to_string (i, t) = "(" ^ string_of_int i ^ ", " ^ (Lt.to_string t) ^ ")"
     let compare_eq (_, t1) (_, t2) = h_trivial t1 < h_trivial t2 end)
 
-  let astar construct_graph term =
+  let [@warning "-32"] astar_decrease construct_graph term =
     let h : Lt.t -> int = h_spine_redex 3 in
 
     let f = open_out "results/astar_output.txt" in
@@ -466,7 +466,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       else if !found_normal_form then ()
       else begin 
         let node_t, d_t, _ = LHashtbl.find node_map t in
-        let next_ts = reduce_step_hnf t in
+        let next_ts = reduce_step t in
         List.iter (fun next_t ->
           if Lt.alpha_eq next_t normal_term then found_normal_form := true;
           if LHashtbl.mem node_map next_t then
@@ -507,7 +507,7 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     with
     | Not_found -> node_map, !graph, [], -1
 
-  let astar_no_decrease construct_graph term =
+  let [@warning "-32"] astar_no_decrease construct_graph term =
     let h : Lt.t -> int = h_spine_redex 3 in
 
     let f = open_out "results/astar_output.txt" in
@@ -546,14 +546,12 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
           if LHashtbl.mem node_map next_t then
             (let node_next_t, d_next_t, _ = LHashtbl.find node_map next_t in
             (if construct_graph then Graph.add_edge node_t node_next_t !graph);
-            if d_t + 1 < d_next_t then
-              (LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t);
-              Queue.prio_insert (0, next_t) (d_t + 1 + (h next_t), next_t) q))
+            if d_t + 1 < d_next_t then LHashtbl.replace node_map next_t (node_next_t, d_t + 1, t))
           else
             (if construct_graph then Graph.force_add_edge node_t !node_id !graph;
             LHashtbl.add node_map next_t (!node_id, d_t+1, t);
-            (if construct_graph then node_id := !node_id + 1);
-            Queue.insert (d_t + 1 + (h next_t), next_t) q);
+            (if construct_graph then node_id := !node_id + 1));
+          Queue.insert (d_t + 1 + (h next_t), next_t) q;
           incr step
         ) next_ts
         end
@@ -581,9 +579,16 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     with
     | Not_found -> node_map, !graph, [], -1
     
+  let astar = astar_decrease
+
+  type search_result =
+    | Found of Lt.t list * int
+    | Exceeded of int
+    | Exhausted
 
   let ida_star_with_tt term =
     let h : Lt.t -> int = h_spine_redex 3 in
+
     let normal_term = S.reduce_safer term in
     let is_goal t = Lt.alpha_eq t normal_term in
     
@@ -593,8 +598,8 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
       let current_term = List.hd path in
       let f = g + h current_term in
       
-      if f > treshold then Some f
-      else if is_goal current_term then Some (-1)
+      if f > treshold then Exceeded f
+      else if is_goal current_term then Found (List.rev path, g)
       else begin
         let should_expand = try
             let best_g = LHashtbl.find tt current_term in
@@ -603,26 +608,28 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
           with Not_found ->
             LHashtbl.add tt current_term g; true
         in
-        if not should_expand then None
+        if not should_expand then Exhausted
         else begin
           let next_ts = reduce_step current_term in
           let min_exceeded = ref max_int in
-          let goal_found = ref false in
+          let found_res = ref None in
 
           List.iter (fun next_t ->
-            if not !goal_found then
+            if Option.is_none !found_res then
               if not (List.exists (Lt.alpha_eq next_t) path) then
                 match search (next_t :: path) (g + 1) treshold with
-                | Some (-1) -> goal_found := true
-                | Some next_treshold ->
+                | Found (p, steps) -> found_res := Some (Found (p, steps))
+                | Exceeded next_treshold ->
                   if next_treshold < !min_exceeded then
                     min_exceeded := next_treshold
-                | None -> ()
+                | Exhausted -> ()
           ) next_ts;
 
-          if !goal_found then Some (-1)
-          else if !min_exceeded = max_int then None
-          else Some !min_exceeded
+          match !found_res with
+          | Some res -> res
+          | None ->
+              if !min_exceeded = max_int then Exhausted
+              else Exceeded !min_exceeded
         end
       end
     in
@@ -630,12 +637,12 @@ module FNoStrategy (S : Strategy) :NoStrategy = struct
     let rec iterate treshold =
       LHashtbl.clear tt;
       match search [term] 0 treshold with
-      | Some (-1) ->
-        Printf.printf "Shortest path found within treshold %d\n" treshold
-      | Some next_treshold ->
+      | Found (path, steps) ->
+        (path, normal_term, steps)
+      | Exceeded next_treshold ->
         iterate next_treshold
-      | None ->
-        Printf.printf "Search space exhausted\n"
+      | Exhausted ->
+        ([], normal_term, -1)
   in
   iterate initial_treshold
 

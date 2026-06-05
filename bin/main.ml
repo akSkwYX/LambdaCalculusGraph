@@ -44,8 +44,11 @@ let astar term (strategy : (module Strategy.NoStrategy)) construct_graph =
 let ida_star term (strategy : (module Strategy.NoStrategy)) _ =
   let module Strategy = (val strategy : Strategy.NoStrategy) in
   let starting_time = Sys.time() in
-  let () = Strategy.ida_star (Strategy.Lt.of_string term) in
+  let (path, normal_term, steps) = Strategy.ida_star (Strategy.Lt.of_string term) in
   let ending_time = Sys.time() in
+  let () = Printf.printf "Found normal term : %s in %d steps\n" (Strategy.Lt.to_string normal_term) steps in
+  let () = print_endline "Path :" in
+  let () = List.iter (print_endline #~ Strategy.Lt.to_string) path in
   let () = print_endline ("Execution time : " ^ (string_of_float (ending_time -. starting_time))) in ()
 
 (* ---------- Extended Lambda Term ---------- *)
